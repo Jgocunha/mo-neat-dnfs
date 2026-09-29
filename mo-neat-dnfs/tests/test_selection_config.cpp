@@ -32,11 +32,14 @@ namespace
         RestoreReferenceConfig& operator=(RestoreReferenceConfig&&) = delete;
     };
 
+    // The shipped reference config, as the starting point each test modifies.
     json referenceConfig()
     {
         return ConfigLoader::loadJsonFile(ConfigLoader::defaultGlobalConfigPath());
     }
 
+    // Writes under <git root>/.claude/temp/ (gitignored); distinct file names per test
+    // keep parallel ctest processes from overwriting each other's config.
     std::string writeTempConfig(const json& config, const std::string& fileName)
     {
         const auto directory = std::filesystem::path(PROJECT_DIR) / ".." / ".claude" / "temp" / "selection-config";
@@ -46,6 +49,7 @@ namespace
         return path.generic_string();
     }
 
+    // Loads the reference config with its SelectionConstants block replaced by block.
     void loadWithSelectionBlock(const json& block, const std::string& fileName)
     {
         auto config = referenceConfig();
@@ -53,6 +57,7 @@ namespace
         ConfigLoader::loadGlobalConfig(writeTempConfig(config, fileName));
     }
 
+    // Moves every selection field off its default, so a test can prove a load reset it.
     void setNonDefaultSelection()
     {
         SelectionConstants::mode = SelectionMode::Pareto;
@@ -62,6 +67,7 @@ namespace
         SelectionConstants::archiveCapacity = 5;
     }
 
+    // Asserts every selection field holds its compiled-in default.
     void requireDefaultSelection()
     {
         REQUIRE(SelectionConstants::mode == SelectionMode::Scalar);

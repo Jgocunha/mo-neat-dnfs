@@ -178,6 +178,8 @@ namespace neat_dnfs
 			}
 		}
 
+		// The config spells the mode as a lowercase string; anything else is a typo
+		// that must not silently fall back to scalar selection.
 		SelectionMode parseSelectionMode(const std::string& name)
 		{
 			if (name == "scalar")
@@ -192,6 +194,7 @@ namespace neat_dnfs
 				+ "' is unknown; expected \"scalar\" or \"pareto\".");
 		}
 
+		// Throws naming the key when value is outside [min, maxExclusive).
 		void requireInRange(const char* key, const double value, const double min, const double maxExclusive)
 		{
 			if (value < min || value >= maxExclusive)
@@ -221,6 +224,9 @@ namespace neat_dnfs
 			}
 		}
 
+		// Resets SelectionConstants to its defaults, then applies whichever keys the
+		// merged config provides. Resetting first matters: a later load (an ablation
+		// preset, a test) must not inherit values from an earlier one.
 		void applySelectionConstants(const nlohmann::json& j)
 		{
 			SelectionConstants::reset();
