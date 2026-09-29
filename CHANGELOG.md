@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Split off from neat-dnfs as mo-neat-dnfs** (multi-objective neuroevolution of augmenting dynamic neural field topologies). Every entry below this one is neat-dnfs history, up to and including its v0.3.0 release. From here the two projects diverge: mo-neat-dnfs adds Pareto selection, and neat-dnfs stays single-objective. The rename is project-level only:
+  - the nested project folder is now `mo-neat-dnfs/`, and the CMake project, library, test target and executables are `mo-neat-dnfs`, `mo-neat-dnfs-test`, `mo-neat-dnfs-evol`, `mo-neat-dnfs-inc-evol` and `mo-neat-dnfs-sol-eval`. The installed data directory is `share/mo-neat-dnfs/`, the CMake package is `mo-neat-dnfs`, and archives are named `mo-neat-dnfs-<version>-...`
+  - the reference config is now `config/mo_neat_dnfs.json`, and the dashboard entry point is `analysis/mo-neat-dnfs-visualizer.py`
+  - **unchanged**: the C++ namespace `neat_dnfs`, include paths, the `NEAT_DNFS_*` CMake options, macros and environment variables, and every output format and JSON key (for example `run_metadata.json`'s `neat_dnfs_version`). Runs recorded by neat-dnfs open unchanged in this dashboard
+
 ---
 
 ## [0.3.0] - 2026-09-01

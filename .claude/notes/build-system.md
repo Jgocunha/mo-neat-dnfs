@@ -3,7 +3,7 @@
 ## There is no `CMakePresets.json`
 
 The `scripts/` wrappers are the build path, and CI uses them directly. There is exactly one
-`CMakeLists.txt`, at `neat-dnfs/CMakeLists.txt` - no subdirectory CMake files.
+`CMakeLists.txt`, at `mo-neat-dnfs/CMakeLists.txt` - no subdirectory CMake files.
 
 ## `VCPKG_ROOT` is a hard failure, not a warning
 
@@ -23,8 +23,8 @@ imperatively by `scripts/setup.{bat,sh}`: `imgui[docking-experimental,core,openg
 
 | Dependency | Installs to |
 |---|---|
-| `imgui-platform-kit` | `neat-dnfs/deps/ipk-install` |
-| `dynamic-neural-field-composer` | `neat-dnfs/deps/dnfc-install` |
+| `imgui-platform-kit` | `mo-neat-dnfs/deps/ipk-install` |
+| `dynamic-neural-field-composer` | `mo-neat-dnfs/deps/dnfc-install` |
 
 These are not found automatically. They reach CMake only via `-DCMAKE_PREFIX_PATH`, which the
 build scripts pass. A hand-rolled `cmake -S . -B ...` that omits it fails at `find_package`.

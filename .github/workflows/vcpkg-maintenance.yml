@@ -65,7 +65,7 @@ jobs:
 
           # Compose issue body
           BODY=$(printf "## Monthly vcpkg dependency report — %s\n\n\
-          This is an automated monthly check of the vcpkg packages used by **neat-dnfs**.\n\
+          This is an automated monthly check of the vcpkg packages used by **mo-neat-dnfs**.\n\
           The project does not pin a vcpkg baseline; CI always pulls the latest vcpkg HEAD.\n\
           The versions below are what is currently available in the vcpkg registry.\n\n\
           ### Package versions\n\n%s\n\

@@ -35,13 +35,13 @@ jobs:
         run: sudo apt-get install -y doxygen
 
       - name: Generate docs
-        working-directory: ./neat-dnfs
+        working-directory: ./mo-neat-dnfs
         run: doxygen docs/Doxyfile
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: neat-dnfs/docs/output/html
+          path: mo-neat-dnfs/docs/output/html
 
       - name: Deploy to GitHub Pages
         id: deployment
@@ -90,7 +90,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.VCPKG_ROOT }}/installed
-          key: vcpkg-${{ runner.os }}-${{ hashFiles('neat-dnfs/scripts/setup.sh') }}
+          key: vcpkg-${{ runner.os }}-${{ hashFiles('mo-neat-dnfs/scripts/setup.sh') }}
           restore-keys: vcpkg-${{ runner.os }}-
 
       # ── Sibling dependencies ─────────────────────────────────────────────────
@@ -104,13 +104,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            neat-dnfs/deps/ipk-install
-            neat-dnfs/deps/dnfc-install
-          key: deps-${{ runner.os }}-${{ env.VCPKG_DEFAULT_TRIPLET }}-${{ steps.deps.outputs.ipk }}-${{ steps.deps.outputs.dnfc }}-${{ hashFiles('neat-dnfs/scripts/setup.sh') }}
+            mo-neat-dnfs/deps/ipk-install
+            mo-neat-dnfs/deps/dnfc-install
+          key: deps-${{ runner.os }}-${{ env.VCPKG_DEFAULT_TRIPLET }}-${{ steps.deps.outputs.ipk }}-${{ steps.deps.outputs.dnfc }}-${{ hashFiles('mo-neat-dnfs/scripts/setup.sh') }}
 
       # ── Dependencies ───────────────────────────────────────────────────────
       - name: Setup dependencies
-        working-directory: ./neat-dnfs
+        working-directory: ./mo-neat-dnfs
         env:
           IPK_REF: ${{ steps.deps.outputs.ipk }}
           DNFC_REF: ${{ steps.deps.outputs.dnfc }}
@@ -120,13 +120,13 @@ jobs:
 
       # ── Build ──────────────────────────────────────────────────────────────
       - name: Build
-        working-directory: ./neat-dnfs
+        working-directory: ./mo-neat-dnfs
         run: |
           chmod +x scripts/build.sh
           ./scripts/build.sh
 
       - name: Run tests
-        working-directory: ./neat-dnfs/build/linux-release
+        working-directory: ./mo-neat-dnfs/build/linux-release
         run: ctest --output-on-failure --parallel $(nproc)
 
   # ── Windows ────────────────────────────────────────────────────────────────
@@ -162,7 +162,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.VCPKG_ROOT }}/installed
-          key: vcpkg-${{ runner.os }}-${{ hashFiles('neat-dnfs/scripts/setup.bat') }}
+          key: vcpkg-${{ runner.os }}-${{ hashFiles('mo-neat-dnfs/scripts/setup.bat') }}
           restore-keys: vcpkg-${{ runner.os }}-
 
       # ── Sibling dependencies ─────────────────────────────────────────────────
@@ -176,13 +176,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            neat-dnfs/deps/ipk-install
-            neat-dnfs/deps/dnfc-install
-          key: deps-${{ runner.os }}-relonly-${{ steps.deps.outputs.ipk }}-${{ steps.deps.outputs.dnfc }}-${{ hashFiles('neat-dnfs/scripts/setup.bat') }}
+            mo-neat-dnfs/deps/ipk-install
+            mo-neat-dnfs/deps/dnfc-install
+          key: deps-${{ runner.os }}-relonly-${{ steps.deps.outputs.ipk }}-${{ steps.deps.outputs.dnfc }}-${{ hashFiles('mo-neat-dnfs/scripts/setup.bat') }}
 
       # ── Dependencies ───────────────────────────────────────────────────────
       - name: Setup dependencies
-        working-directory: ./neat-dnfs
+        working-directory: ./mo-neat-dnfs
         shell: cmd
         env:
           IPK_REF: ${{ steps.deps.outputs.ipk }}
@@ -191,12 +191,12 @@ jobs:
 
       # ── Build ──────────────────────────────────────────────────────────────
       - name: Build
-        working-directory: ./neat-dnfs
+        working-directory: ./mo-neat-dnfs
         shell: cmd
         run: scripts\build.bat
 
       - name: Run tests
-        working-directory: ./neat-dnfs/build/x64-release
+        working-directory: ./mo-neat-dnfs/build/x64-release
         shell: cmd
         env:
           CTEST_FILTER: ${{ github.event_name == 'pull_request' && '-LE slow' || '' }}
@@ -239,7 +239,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.VCPKG_ROOT }}/installed
-          key: vcpkg-${{ runner.os }}-${{ steps.triplet.outputs.vcpkg_triplet }}-${{ hashFiles('neat-dnfs/scripts/setup.sh') }}
+          key: vcpkg-${{ runner.os }}-${{ steps.triplet.outputs.vcpkg_triplet }}-${{ hashFiles('mo-neat-dnfs/scripts/setup.sh') }}
           restore-keys: vcpkg-${{ runner.os }}-${{ steps.triplet.outputs.vcpkg_triplet }}-
 
       # ── Sibling dependencies ─────────────────────────────────────────────────
@@ -253,13 +253,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            neat-dnfs/deps/ipk-install
-            neat-dnfs/deps/dnfc-install
-          key: deps-${{ runner.os }}-${{ steps.triplet.outputs.vcpkg_triplet }}-${{ steps.deps.outputs.ipk }}-${{ steps.deps.outputs.dnfc }}-${{ hashFiles('neat-dnfs/scripts/setup.sh') }}
+            mo-neat-dnfs/deps/ipk-install
+            mo-neat-dnfs/deps/dnfc-install
+          key: deps-${{ runner.os }}-${{ steps.triplet.outputs.vcpkg_triplet }}-${{ steps.deps.outputs.ipk }}-${{ steps.deps.outputs.dnfc }}-${{ hashFiles('mo-neat-dnfs/scripts/setup.sh') }}
 
       # ── Dependencies ───────────────────────────────────────────────────────
       - name: Setup dependencies
-        working-directory: ./neat-dnfs
+        working-directory: ./mo-neat-dnfs
         env:
           IPK_REF: ${{ steps.deps.outputs.ipk }}
           DNFC_REF: ${{ steps.deps.outputs.dnfc }}
@@ -269,13 +269,13 @@ jobs:
 
       # ── Build ──────────────────────────────────────────────────────────────
       - name: Build
-        working-directory: ./neat-dnfs
+        working-directory: ./mo-neat-dnfs
         run: |
           chmod +x scripts/build_macos.sh
           ./scripts/build_macos.sh
 
       - name: Run tests
-        working-directory: ./neat-dnfs/build/macos-release
+        working-directory: ./mo-neat-dnfs/build/macos-release
         run: |
           FILTER=()
           if [ "${{ github.event_name }}" = "pull_request" ]; then
@@ -300,14 +300,14 @@ jobs:
         with:
           python-version: '3.12'
           cache: 'pip'
-          cache-dependency-path: neat-dnfs/analysis/requirements.txt
+          cache-dependency-path: mo-neat-dnfs/analysis/requirements.txt
 
       - name: Install analysis dependencies
-        working-directory: ./neat-dnfs/analysis
+        working-directory: ./mo-neat-dnfs/analysis
         run: pip install -r requirements.txt
 
       - name: Run analysis tests
-        working-directory: ./neat-dnfs/analysis
+        working-directory: ./mo-neat-dnfs/analysis
         run: python -m pytest
 
 
@@ -354,7 +354,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.VCPKG_ROOT }}/installed
-          key: vcpkg-${{ runner.os }}-${{ hashFiles('neat-dnfs/scripts/setup.sh') }}
+          key: vcpkg-${{ runner.os }}-${{ hashFiles('mo-neat-dnfs/scripts/setup.sh') }}
           restore-keys: vcpkg-${{ runner.os }}-
 
       # ── Sibling dependencies ─────────────────────────────────────────────────
@@ -368,13 +368,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            neat-dnfs/deps/ipk-install
-            neat-dnfs/deps/dnfc-install
-          key: deps-${{ runner.os }}-${{ env.VCPKG_DEFAULT_TRIPLET }}-${{ steps.deps.outputs.ipk }}-${{ steps.deps.outputs.dnfc }}-${{ hashFiles('neat-dnfs/scripts/setup.sh') }}
+            mo-neat-dnfs/deps/ipk-install
+            mo-neat-dnfs/deps/dnfc-install
+          key: deps-${{ runner.os }}-${{ env.VCPKG_DEFAULT_TRIPLET }}-${{ steps.deps.outputs.ipk }}-${{ steps.deps.outputs.dnfc }}-${{ hashFiles('mo-neat-dnfs/scripts/setup.sh') }}
 
       # ── Dependencies ───────────────────────────────────────────────────────
       - name: Setup dependencies
-        working-directory: ./neat-dnfs
+        working-directory: ./mo-neat-dnfs
         env:
           IPK_REF: ${{ steps.deps.outputs.ipk }}
           DNFC_REF: ${{ steps.deps.outputs.dnfc }}
@@ -384,7 +384,7 @@ jobs:
 
       # ── Build with coverage instrumentation ───────────────────────────────
       - name: Build
-        working-directory: ./neat-dnfs
+        working-directory: ./mo-neat-dnfs
         run: |
           DEPS_DIR="$(pwd)/deps"
           BUILD_DIR="$(pwd)/build/linux-coverage"
@@ -399,12 +399,12 @@ jobs:
 
       # ── Run tests ─────────────────────────────────────────────────────────
       - name: Run tests
-        working-directory: ./neat-dnfs/build/linux-coverage
+        working-directory: ./mo-neat-dnfs/build/linux-coverage
         run: ctest --output-on-failure --parallel $(nproc)
 
       # ── Collect and filter coverage ───────────────────────────────────────
       - name: Collect coverage
-        working-directory: ./neat-dnfs/build/linux-coverage
+        working-directory: ./mo-neat-dnfs/build/linux-coverage
         run: |
           lcov --capture --directory . --output-file coverage.info \
             --ignore-errors negative,gcov
@@ -417,7 +417,7 @@ jobs:
       - name: Upload to Codecov
         uses: codecov/codecov-action@v4
         with:
-          files: neat-dnfs/build/linux-coverage/coverage_filtered.info
+          files: mo-neat-dnfs/build/linux-coverage/coverage_filtered.info
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: true
 
@@ -475,7 +475,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.VCPKG_ROOT }}/installed
-          key: vcpkg-${{ runner.os }}-${{ hashFiles('neat-dnfs/scripts/setup.sh') }}
+          key: vcpkg-${{ runner.os }}-${{ hashFiles('mo-neat-dnfs/scripts/setup.sh') }}
           restore-keys: vcpkg-${{ runner.os }}-
 
       # ── Sibling dependencies ─────────────────────────────────────────────────
@@ -489,13 +489,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            neat-dnfs/deps/ipk-install
-            neat-dnfs/deps/dnfc-install
-          key: deps-${{ runner.os }}-${{ env.VCPKG_DEFAULT_TRIPLET }}-${{ steps.deps.outputs.ipk }}-${{ steps.deps.outputs.dnfc }}-${{ hashFiles('neat-dnfs/scripts/setup.sh') }}
+            mo-neat-dnfs/deps/ipk-install
+            mo-neat-dnfs/deps/dnfc-install
+          key: deps-${{ runner.os }}-${{ env.VCPKG_DEFAULT_TRIPLET }}-${{ steps.deps.outputs.ipk }}-${{ steps.deps.outputs.dnfc }}-${{ hashFiles('mo-neat-dnfs/scripts/setup.sh') }}
 
       # ── Dependencies ───────────────────────────────────────────────────────
       - name: Setup dependencies
-        working-directory: ./neat-dnfs
+        working-directory: ./mo-neat-dnfs
         env:
           IPK_REF: ${{ steps.deps.outputs.ipk }}
           DNFC_REF: ${{ steps.deps.outputs.dnfc }}
@@ -505,7 +505,7 @@ jobs:
 
       # ── Build with sanitizer instrumentation ────────────────────────────────
       - name: Build
-        working-directory: ./neat-dnfs
+        working-directory: ./mo-neat-dnfs
         run: |
           DEPS_DIR="$(pwd)/deps"
           BUILD_DIR="$(pwd)/build/linux-${{ matrix.name }}"
@@ -519,7 +519,7 @@ jobs:
 
       # ── Run tests ─────────────────────────────────────────────────────────
       - name: Run tests
-        working-directory: ./neat-dnfs/build/linux-${{ matrix.name }}
+        working-directory: ./mo-neat-dnfs/build/linux-${{ matrix.name }}
         env:
           ASAN_OPTIONS: halt_on_error=1:detect_leaks=0
           UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1

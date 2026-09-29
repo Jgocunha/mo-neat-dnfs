@@ -5,7 +5,7 @@ on:
     branches: [main]
     types: [opened, synchronize]
     paths:
-      - 'neat-dnfs/include/**'
+      - 'mo-neat-dnfs/include/**'
 
 permissions:
   contents: read
@@ -30,14 +30,14 @@ jobs:
           gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
           prompt: |
             This pull request modifies one or more public API headers under
-            `neat-dnfs/include/`. Audit the documentation impact and post a
+            `mo-neat-dnfs/include/`. Audit the documentation impact and post a
             single PR comment listing what needs updating. Do NOT commit or modify any files.
 
             Repository: ${{ github.repository }}
             PR number: ${{ github.event.pull_request.number }}
 
             Project layout:
-            - Public headers: neat-dnfs/include/**/*.h
+            - Public headers: mo-neat-dnfs/include/**/*.h
             - README:         README.md (top-level)
             - Changelog:      CHANGELOG.md (top-level)
 

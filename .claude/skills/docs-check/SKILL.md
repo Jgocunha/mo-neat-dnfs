@@ -1,6 +1,6 @@
 ---
 name: docs-check
-description: Verify documentation keeps up with a code change in neat-dnfs - Doxygen on public API, the matching prose doc or config JSON, and stale references elsewhere. Use before opening a PR, or when asked whether docs need updating.
+description: Verify documentation keeps up with a code change in mo-neat-dnfs - Doxygen on public API, the matching prose doc or config JSON, and stale references elsewhere. Use before opening a PR, or when asked whether docs need updating.
 ---
 
 # Docs check
@@ -10,7 +10,7 @@ prose that is merely different from how you would put it.
 
 ## Pass 1 - Doxygen
 
-Scope: new or changed public entities under `neat-dnfs/include/`.
+Scope: new or changed public entities under `mo-neat-dnfs/include/`.
 
 Each needs:
 - `@brief` - one line, what it does
@@ -26,7 +26,7 @@ Flag three failure modes:
 Private helpers in `src/` do not need Doxygen.
 
 **This pass is enforced in CI.** `.github/workflows/gemini-doc-sync.yml` runs a completeness
-check on every PR touching `neat-dnfs/include/**`, and the `docs` job publishes Doxygen to
+check on every PR touching `mo-neat-dnfs/include/**`, and the `docs` job publishes Doxygen to
 GitHub Pages. A gap here becomes a PR comment whether or not you catch it first.
 
 ## Pass 2 - Prose and config
@@ -36,14 +36,14 @@ wiki, off-repo. What *is* in-repo and can go stale:
 
 | Changed | Owes an update to |
 |---|---|
-| CLI flags, app behaviour, config precedence | `neat-dnfs/apps/README.md` |
-| A hyperparameter default | the JSON under `neat-dnfs/config/`, not just `constants.h` |
-| A solution's parameters or fitness | `neat-dnfs/config/solutions/<task>.json` |
-| An ablation's meaning | `neat-dnfs/config/ablations/<name>.json` |
-| Starting topology shipped with the project | `neat-dnfs/templates/` |
+| CLI flags, app behaviour, config precedence | `mo-neat-dnfs/apps/README.md` |
+| A hyperparameter default | the JSON under `mo-neat-dnfs/config/`, not just `constants.h` |
+| A solution's parameters or fitness | `mo-neat-dnfs/config/solutions/<task>.json` |
+| An ablation's meaning | `mo-neat-dnfs/config/ablations/<name>.json` |
+| Starting topology shipped with the project | `mo-neat-dnfs/templates/` |
 | Build, dependencies, setup | root `README.md` |
 | Anything user-visible | `CHANGELOG.md` (Keep a Changelog, at the git root) |
-| Visualizer behaviour | `neat-dnfs/analysis/` - no README, so check the module docstrings |
+| Visualizer behaviour | `mo-neat-dnfs/analysis/` - no README, so check the module docstrings |
 
 **Remember that behaviour is JSON-driven.** A change to a default is only real if the JSON
 under `config/` changed too; editing a constant that the config overrides at runtime is a
@@ -61,13 +61,13 @@ Grep the repo for references the change invalidated:
 
 ```bash
 grep -rn "<old_symbol>" README.md CHANGELOG.md .coderabbit.yaml \
-    neat-dnfs/apps/README.md neat-dnfs/config/ neat-dnfs/templates/ .claude/
+    mo-neat-dnfs/apps/README.md mo-neat-dnfs/config/ mo-neat-dnfs/templates/ .claude/
 ```
 
 Look for renamed or removed symbols, moved file paths, changed build commands or flags, JSON
 keys that no longer load, and example snippets that no longer compile. Check the root
 `README.md` and `.coderabbit.yaml` specifically when the build process or directory layout
-moved - `.coderabbit.yaml` names paths and the `neat-dnfs-test` target explicitly and will
+moved - `.coderabbit.yaml` names paths and the `mo-neat-dnfs-test` target explicitly and will
 quietly go stale.
 
 ## Output

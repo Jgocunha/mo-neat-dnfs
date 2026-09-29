@@ -1,24 +1,22 @@
-# neat-dnfs
+# mo-neat-dnfs
 
-## A NeuroEvolutionary Framework for Evolving Dynamic Neural Field Architectures
+## Multi-Objective NeuroEvolution of Augmenting Dynamic Neural Field Topologies
 
-<img src="https://raw.githubusercontent.com/Jgocunha/neat-dnfs/main/neat-dnfs/resources/images/logo.png" alt="logo" width="800" height="800">
+<img src="mo-neat-dnfs/resources/images/logo.png" alt="logo" width="800" height="800">
 
 ---
 
-[![CI](https://img.shields.io/github/actions/workflow/status/Jgocunha/neat-dnfs/ci.yml?branch=main&style=flat-square&logo=githubactions&logoColor=white&label=CI)](https://github.com/Jgocunha/neat-dnfs/actions/workflows/ci.yml)
-[![Static Analysis](https://img.shields.io/github/actions/workflow/status/Jgocunha/neat-dnfs/static-analysis.yml?branch=main&style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIj48Y2lyY2xlIGN4PSIxMCIgY3k9IjEwIiByPSI3Ii8%2BPGxpbmUgeDE9IjE1IiB5MT0iMTUiIHgyPSIyMSIgeTI9IjIxIi8%2BPC9zdmc%2B&logoColor=white&label=static%20analysis)](https://github.com/Jgocunha/neat-dnfs/actions/workflows/static-analysis.yml)
-[![Coverage](https://img.shields.io/codecov/c/github/Jgocunha/neat-dnfs?style=flat-square&logo=codecov&logoColor=white)](https://codecov.io/gh/Jgocunha/neat-dnfs)
-[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue?style=flat-square&logo=readthedocs&logoColor=white)](https://jgocunha.github.io/neat-dnfs/)
-[![Wiki](https://img.shields.io/badge/wiki-GitHub%20Wiki-blue?style=flat-square&logo=github&logoColor=white)](https://github.com/Jgocunha/neat-dnfs/wiki)
-
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C?style=flat-square&logo=cplusplus&logoColor=white)](https://en.cppreference.com/w/cpp/20)
 [![CMake](https://img.shields.io/badge/CMake-3.31%2B-064F8C?style=flat-square&logo=cmake&logoColor=white)](https://cmake.org)
-[![Windows](https://img.shields.io/badge/Windows-0078D6?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI2ZmZiI%2BPHBhdGggZD0iTTAgMy40NDlMOS43NSAyLjF2OS40NTFIMG0xMC45NDktOS42MDJMMjQgMHYxMS40SDEwLjk0OU0wIDEyLjZoOS43NXY5LjQ1MUwwIDIwLjY5OU0xMC45NDkgMTIuNkgyNFYyNGwtMTIuOS0xLjgwMSIvPjwvc3ZnPg%3D%3D&logoColor=white)](https://github.com/Jgocunha/neat-dnfs/actions)
-[![Linux](https://img.shields.io/badge/Linux-FCC624?style=flat-square&logo=linux&logoColor=black)](https://github.com/Jgocunha/neat-dnfs/actions)
-[![macOS](https://img.shields.io/badge/macOS-000000?style=flat-square&logo=apple&logoColor=white)](https://github.com/Jgocunha/neat-dnfs/actions)
 
-**neat-dnfs** is a C++ framework that extends **NeuroEvolution of Augmenting Topologies (NEAT)** to the automated synthesis of **Dynamic Neural Field (DNF)** architectures.
+**mo-neat-dnfs** is the multi-objective branch of [neat-dnfs](https://github.com/Jgocunha/neat-dnfs),
+split off from neat-dnfs v0.3.0. It keeps everything neat-dnfs does and adds **Pareto (multi-objective)
+selection**: instead of ranking solutions by a weighted sum of their partial fitnesses, it can rank them
+by dominance over an objective vector (NSGA-II non-dominated sorting and crowding distance, inside NEAT's
+species loop). Scalar selection remains the default and behaves exactly as in neat-dnfs. The two
+projects are developed separately from here on.
+
+**mo-neat-dnfs** is a C++ framework that extends **NeuroEvolution of Augmenting Topologies (NEAT)** to the automated synthesis of **Dynamic Neural Field (DNF)** architectures.
 It enables the joint evolution of **continuous-time neural dynamics**, **kernel-based interactions**, and **architectural topology**, supporting the discovery of compact and interpretable Dynamic Field Theory (DFT) models without manual tuning.
 
 ---
@@ -27,7 +25,7 @@ It enables the joint evolution of **continuous-time neural dynamics**, **kernel-
 
 Dynamic Neural Fields (DNFs) provide a biologically grounded and mathematically principled framework for modelling neural population dynamics underlying perception, working memory, selection, and decision-making. Despite their expressive power, DNF architectures are traditionally **hand-designed and manually parameterised**, a process that is time-consuming, difficult to generalise, and highly dependent on expert knowledge.
 
-**neat-dnfs** addresses this limitation by integrating DNFs with **neuroevolution**.
+**mo-neat-dnfs** addresses this limitation by integrating DNFs with **neuroevolution**.
 By extending NEAT to operate directly on neural fields and spatial interaction kernels—rather than discrete neurons and scalar weights—the framework enables the **autonomous discovery of DNF architectures** that exhibit desired dynamical behaviours.
 
 The system evolves both:
@@ -74,9 +72,9 @@ Evolution proceeds from minimal architectures and introduces complexity **only w
 | **Field Genes**       | Represent individual neural fields (input, hidden, output) and their intrinsic dynamics. |
 | **Interaction Genes** | Represent spatially structured kernel-based couplings between fields.                    |
 
-<img src="https://raw.githubusercontent.com/Jgocunha/neat-dnfs/main/neat-dnfs/resources/images/phenotype-genotype-mapping-wb.png">
+<img src="mo-neat-dnfs/resources/images/phenotype-genotype-mapping-wb.png">
 
-**Genotype-to-phenotype mapping in neat-dnfs.**
+**Genotype-to-phenotype mapping in mo-neat-dnfs.**
 *Field genes encode intrinsic neural field dynamics, while interaction genes specify kernel-defined couplings. Together, they map directly to a continuous-time DNF architecture.*
 
 ---
@@ -113,18 +111,19 @@ Additional simple logical tasks (e.g., AND, XOR) are included for validation and
 
 ## Download a pre-built release
 
-Every tagged release ships ready-to-run archives for Windows, Linux and macOS on the
-[Releases page](https://github.com/Jgocunha/neat-dnfs/releases) — no VCPKG, no compiler, no build.
+`scripts/package.bat` / `scripts/package.sh` build ready-to-run archives for Windows, Linux and
+macOS. mo-neat-dnfs has no published releases yet; neat-dnfs's own releases are on its
+[Releases page](https://github.com/Jgocunha/neat-dnfs/releases).
 
 ```bash
-tar -xzf neat-dnfs-<version>-linux-x64.tar.gz    # or unzip the Windows archive
-cd neat-dnfs-<version>-linux-x64
-./bin/neat-dnfs-evol --help
-./bin/neat-dnfs-evol --task xor --runs 1
+tar -xzf mo-neat-dnfs-<version>-linux-x64.tar.gz    # or unzip the Windows archive
+cd mo-neat-dnfs-<version>-linux-x64
+./bin/mo-neat-dnfs-evol --help
+./bin/mo-neat-dnfs-evol --task xor --runs 1
 ```
 
 Each archive holds the three experiment executables in `bin/` and the hyperparameter
-files they read in `share/neat-dnfs/` (`config/`, `templates/`). The binaries find those
+files they read in `share/mo-neat-dnfs/` (`config/`, `templates/`). The binaries find those
 files relative to their own location, so the extracted folder can live anywhere; results
 are written to a `data/` folder in whatever directory you run from. Two environment
 variables override this: `NEAT_DNFS_ROOT` points at a different `config/`+`templates/`
@@ -172,7 +171,7 @@ cmake --build . --config Release
 
 ## Usage
 
-> **New here?** [First Steps](https://github.com/Jgocunha/neat-dnfs/wiki/First-Steps) is the practical guide: running experiments and
+> **New here?** [First Steps](https://github.com/Jgocunha/neat-dnfs/wiki/First-Steps) (neat-dnfs wiki; it applies here, with `mo-` prefixed binary names) is the practical guide: running experiments and
 > ablations, and which config files to edit to change hyperparameters.
 
 ### Basic Example
@@ -212,12 +211,12 @@ void evaluate() override
 
 ### Ablation Studies
 
-`neat-dnfs-evol` and `neat-dnfs-inc-evol` accept `--task NAME` and `--ablation NAME` at runtime, so
+`mo-neat-dnfs-evol` and `mo-neat-dnfs-inc-evol` accept `--task NAME` and `--ablation NAME` at runtime, so
 sweeping a task across every mechanism condition is a shell loop, not a rebuild (`--list` prints the
 available tasks and ablations):
 
 ```bash
-neat-dnfs-evol --task and --ablation no-crossover --runs 30 --pop 500 --gens 200 --target 0.9
+mo-neat-dnfs-evol --task and --ablation no-crossover --runs 30 --pop 500 --gens 200 --target 0.9
 ```
 
 Five conditions are available, each a config-only override applied before `Population::initialize()`
@@ -267,7 +266,7 @@ run is opened.
 ## Project Structure
 
 ```bash
-neat-dnfs/
+mo-neat-dnfs/
 ├── include/
 │   ├── neat/          # Core NEAT-DNF implementation
 │   ├── solutions/     # Task definitions
@@ -293,7 +292,7 @@ neat-dnfs/
 
 ## Documentation
 
-For a full exploration of the repository, refer to the [Wiki.](https://github.com/anonymous-author-submissions/neat-dnfs/wiki)
+For a full exploration of the repository, refer to the [neat-dnfs Wiki](https://github.com/Jgocunha/neat-dnfs/wiki). The multi-objective design is in `.claude/notes/MOO/PLAN.md`.
 
 ---
 

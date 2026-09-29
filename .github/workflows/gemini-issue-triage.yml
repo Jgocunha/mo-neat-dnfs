@@ -50,7 +50,7 @@ jobs:
           gemini_cli_version: latest
           gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
           prompt: |
-            Classify a GitHub issue for the **neat-dnfs** project and return ONLY a JSON object.
+            Classify a GitHub issue for the **mo-neat-dnfs** project and return ONLY a JSON object.
             Do not execute any commands. Do not produce any text outside the JSON object.
 
             Issue title: ${{ github.event.issue.title }}

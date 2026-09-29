@@ -1,6 +1,6 @@
 ---
 name: autopilot
-description: Orchestrate unattended resolution of open GitHub issues in neat-dnfs - triage by complexity, dispatch parallel worker agents into isolated worktrees, review their diffs, open PRs, and monitor CI and CodeRabbit until green. Use when asked to work through open issues autonomously or put Claude on auto-pilot.
+description: Orchestrate unattended resolution of open GitHub issues in mo-neat-dnfs - triage by complexity, dispatch parallel worker agents into isolated worktrees, review their diffs, open PRs, and monitor CI and CodeRabbit until green. Use when asked to work through open issues autonomously or put Claude on auto-pilot.
 ---
 
 # Autopilot
@@ -63,7 +63,7 @@ git worktree add <worktrees-dir>/<short-name> -b <type>/<slug> <base>
 ```
 
 Use the worktree root the user names. If none was given, default to a sibling of the
-repository (e.g. `../neat-dnfs-worktrees/`) and say which you chose. `<base>` defaults to
+repository (e.g. `../mo-neat-dnfs-worktrees/`) and say which you chose. `<base>` defaults to
 `origin/main` unless told otherwise - record whichever value you used, since Phase 5 needs
 the same one for `gh pr create --base`. Record the mapping of issue to worktree so you can
 find each one again in Phase 4.

@@ -1,6 +1,6 @@
 ---
 name: project-code-review
-description: Review a diff against neat-dnfs's own standards - backwards compatibility, Clean Code, neat_tools/ helper reuse, C++20 idiom, evolution hot-path performance, and test coverage. Use before opening a PR or when asked to review a branch or change.
+description: Review a diff against mo-neat-dnfs's own standards - backwards compatibility, Clean Code, neat_tools/ helper reuse, C++20 idiom, evolution hot-path performance, and test coverage. Use before opening a PR or when asked to review a branch or change.
 ---
 
 # Project code review

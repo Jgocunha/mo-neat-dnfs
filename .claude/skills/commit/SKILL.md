@@ -1,6 +1,6 @@
 ---
 name: commit
-description: Read the uncommitted diff in neat-dnfs and print conventional commit message(s) for it, grouped by logical change. Use when asked to write, suggest or draft a commit message, or "what should I commit this as".
+description: Read the uncommitted diff in mo-neat-dnfs and print conventional commit message(s) for it, grouped by logical change. Use when asked to write, suggest or draft a commit message, or "what should I commit this as".
 ---
 
 # Commit

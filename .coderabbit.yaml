@@ -8,8 +8,9 @@ reviews:
 
   # Project-specific review instructions
   instructions: |
-    This is **neat-dnfs**, a C++20 NEAT framework for evolving Dynamic Neural Field (DNF)
-    architectures. The project implements neuroevolution of DNF topologies for robotics tasks.
+    This is **mo-neat-dnfs**, a C++20 NEAT framework for evolving Dynamic Neural Field (DNF)
+    architectures -- the multi-objective (Pareto selection) branch of neat-dnfs. The project
+    implements neuroevolution of DNF topologies for robotics tasks.
     Key dependencies: dynamic-neural-field-composer, imgui-platform-kit, imgui (docking-experimental,
     glfw/opengl3 bindings), implot, imgui-node-editor, nlohmann-json, catch2.
 
@@ -24,11 +25,11 @@ reviews:
 
     **Test coverage**
     - Changes to genome/population/species logic, field/connection genes, or solution behaviour
-      must have tests in `neat-dnfs/tests/` (Catch2 target `neat-dnfs-test`).
+      must have tests in `mo-neat-dnfs/tests/` (Catch2 target `mo-neat-dnfs-test`).
     - Flag any new public functions or changed behaviour without corresponding tests.
 
     **Doxygen documentation**
-    - All new or changed public functions/classes/structs under `neat-dnfs/include/` need Doxygen
+    - All new or changed public functions/classes/structs under `mo-neat-dnfs/include/` need Doxygen
       blocks with at minimum `@brief`, one `@param` per parameter, and `@return` (unless void).
     - Flag missing or stale Doxygen.
 
@@ -46,7 +47,7 @@ reviews:
   # Files to exclude from review
   path_filters:
     - "!build/**"
-    - "!neat-dnfs/docs/**"
+    - "!mo-neat-dnfs/docs/**"
     - "!vcpkg/**"
     - "!deps/**"
     - "!**/compile_commands.json"

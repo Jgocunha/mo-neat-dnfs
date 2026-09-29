@@ -49,7 +49,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.VCPKG_ROOT }}/installed
-          key: vcpkg-${{ runner.os }}-${{ hashFiles('neat-dnfs/scripts/setup.sh') }}
+          key: vcpkg-${{ runner.os }}-${{ hashFiles('mo-neat-dnfs/scripts/setup.sh') }}
           restore-keys: vcpkg-${{ runner.os }}-
 
       # ── Sibling dependencies ─────────────────────────────────────────────────
@@ -63,12 +63,12 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            neat-dnfs/deps/ipk-install
-            neat-dnfs/deps/dnfc-install
-          key: deps-${{ runner.os }}-${{ env.VCPKG_DEFAULT_TRIPLET }}-${{ steps.deps.outputs.ipk }}-${{ steps.deps.outputs.dnfc }}-${{ hashFiles('neat-dnfs/scripts/setup.sh') }}
+            mo-neat-dnfs/deps/ipk-install
+            mo-neat-dnfs/deps/dnfc-install
+          key: deps-${{ runner.os }}-${{ env.VCPKG_DEFAULT_TRIPLET }}-${{ steps.deps.outputs.ipk }}-${{ steps.deps.outputs.dnfc }}-${{ hashFiles('mo-neat-dnfs/scripts/setup.sh') }}
 
       - name: Setup dependencies
-        working-directory: ./neat-dnfs
+        working-directory: ./mo-neat-dnfs
         env:
           IPK_REF: ${{ steps.deps.outputs.ipk }}
           DNFC_REF: ${{ steps.deps.outputs.dnfc }}
@@ -77,7 +77,7 @@ jobs:
           ./scripts/setup.sh
 
       - name: Configure (generate compile_commands.json)
-        working-directory: ./neat-dnfs
+        working-directory: ./mo-neat-dnfs
         run: |
           cmake -S . -B build/analysis \
             -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake \
@@ -86,7 +86,7 @@ jobs:
             -DCMAKE_PREFIX_PATH="deps/ipk-install;deps/dnfc-install"
 
       - name: Run clang-tidy
-        working-directory: ./neat-dnfs
+        working-directory: ./mo-neat-dnfs
         run: |
           set -o pipefail
           run-clang-tidy -p build/analysis \
@@ -95,7 +95,7 @@ jobs:
             2>&1 | tee clang-tidy-report.txt
 
       - name: Run cppcheck
-        working-directory: ./neat-dnfs
+        working-directory: ./mo-neat-dnfs
         run: |
           cppcheck \
             --enable=warning,style,performance,portability \
@@ -113,5 +113,5 @@ jobs:
         with:
           name: static-analysis-reports
           path: |
-            neat-dnfs/clang-tidy-report.txt
-            neat-dnfs/cppcheck-report.txt
+            mo-neat-dnfs/clang-tidy-report.txt
+            mo-neat-dnfs/cppcheck-report.txt

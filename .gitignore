@@ -11,27 +11,27 @@
 
 # The shared .claude/ is the one at the repo root. A .claude/ inside the nested project
 # dir is always a mistake -- see CLAUDE.md > Temp files -- and must never be committed.
-neat-dnfs/.claude/
+mo-neat-dnfs/.claude/
 
 install/
 build/
 
 # Dependency sources and installs cloned/built by setup scripts
-neat-dnfs/deps/
+mo-neat-dnfs/deps/
 
 # Release archives staged by scripts/package.sh / package.bat
-neat-dnfs/package/
+mo-neat-dnfs/package/
 
 # NEAT session run data (timestamped folders and files)
-neat-dnfs/data/**/*[0-9][0-9]h[0-9][0-9]m[0-9][0-9]s*/
-neat-dnfs/data/**/*[0-9][0-9]h[0-9][0-9]m[0-9][0-9]s*
+mo-neat-dnfs/data/**/*[0-9][0-9]h[0-9][0-9]m[0-9][0-9]s*/
+mo-neat-dnfs/data/**/*[0-9][0-9]h[0-9][0-9]m[0-9][0-9]s*
 
 # Visualizer cache
-neat-dnfs/data/**/.viz_cache/
-neat-dnfs/analysis/.pytest_cache/
+mo-neat-dnfs/data/**/.viz_cache/
+mo-neat-dnfs/analysis/.pytest_cache/
 
 # Doxygen generated output
-neat-dnfs/docs/output/
+mo-neat-dnfs/docs/output/
 # Prerequisites
 *.d
 
@@ -863,3 +863,11 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+
+# Multi-objective design notes: PLAN.md and sandbox/ scripts are tracked; the papers, their
+# extracted text, and probe run logs stay local.
+.claude/notes/MOO/*.pdf
+.claude/notes/MOO/*.tex
+.claude/notes/MOO/sandbox/*.txt
+.claude/notes/MOO/sandbox/*.log
+.claude/notes/MOO/sandbox/__pycache__/

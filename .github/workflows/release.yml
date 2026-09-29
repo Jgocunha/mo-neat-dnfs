@@ -7,7 +7,7 @@ name: Release
 #
 # The archives are relocatable because the binaries resolve their data files
 # relative to their own location -- see
-# neat-dnfs/include/neat_tools/resource_paths.h.
+# mo-neat-dnfs/include/neat_tools/resource_paths.h.
 #
 # Note that scripts/setup.* clone vcpkg, imgui-platform-kit and
 # dynamic-neural-field-composer at unpinned HEAD, exactly as ci.yml does. Two
@@ -108,53 +108,53 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.VCPKG_ROOT }}/installed
-          key: vcpkg-${{ runner.os }}-${{ steps.triplet.outputs.vcpkg_triplet }}-${{ hashFiles('neat-dnfs/scripts/setup.sh', 'neat-dnfs/scripts/setup.bat') }}
+          key: vcpkg-${{ runner.os }}-${{ steps.triplet.outputs.vcpkg_triplet }}-${{ hashFiles('mo-neat-dnfs/scripts/setup.sh', 'mo-neat-dnfs/scripts/setup.bat') }}
           restore-keys: vcpkg-${{ runner.os }}-${{ steps.triplet.outputs.vcpkg_triplet }}-
 
       # ── Dependencies, build, package ───────────────────────────────────────
       - name: Setup dependencies
         if: runner.os != 'Windows'
-        working-directory: ./neat-dnfs
+        working-directory: ./mo-neat-dnfs
         run: |
           chmod +x scripts/setup.sh
           ./scripts/setup.sh
 
       - name: Setup dependencies (Windows)
         if: runner.os == 'Windows'
-        working-directory: ./neat-dnfs
+        working-directory: ./mo-neat-dnfs
         shell: cmd
         run: scripts\setup.bat
 
       - name: Build
         if: runner.os == 'Linux'
-        working-directory: ./neat-dnfs
+        working-directory: ./mo-neat-dnfs
         run: |
           chmod +x scripts/build.sh
           ./scripts/build.sh
 
       - name: Build (macOS)
         if: runner.os == 'macOS'
-        working-directory: ./neat-dnfs
+        working-directory: ./mo-neat-dnfs
         run: |
           chmod +x scripts/build_macos.sh
           ./scripts/build_macos.sh
 
       - name: Build (Windows)
         if: runner.os == 'Windows'
-        working-directory: ./neat-dnfs
+        working-directory: ./mo-neat-dnfs
         shell: cmd
         run: scripts\build.bat
 
       - name: Package
         if: runner.os != 'Windows'
-        working-directory: ./neat-dnfs
+        working-directory: ./mo-neat-dnfs
         run: |
           chmod +x scripts/package.sh
           ./scripts/package.sh
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
-        working-directory: ./neat-dnfs
+        working-directory: ./mo-neat-dnfs
         shell: cmd
         run: scripts\package.bat
 
@@ -169,17 +169,17 @@ jobs:
           # which -o pipefail (bash's GitHub Actions default) turns into a step
           # failure even though the archive that does exist was found.
           shopt -s nullglob
-          CANDIDATES=(neat-dnfs/package/neat-dnfs-*.zip neat-dnfs/package/neat-dnfs-*.tar.gz)
+          CANDIDATES=(mo-neat-dnfs/package/mo-neat-dnfs-*.zip mo-neat-dnfs/package/mo-neat-dnfs-*.tar.gz)
           if [ "${#CANDIDATES[@]}" -eq 0 ]; then
-            echo "No package archive found under neat-dnfs/package/."
+            echo "No package archive found under mo-neat-dnfs/package/."
             exit 1
           fi
           ARCHIVE="${CANDIDATES[0]}"
-          PACKAGED=$(basename "$ARCHIVE" | sed -E 's/^neat-dnfs-([^-]+)-.*/\1/')
+          PACKAGED=$(basename "$ARCHIVE" | sed -E 's/^mo-neat-dnfs-([^-]+)-.*/\1/')
           TAGGED="${GITHUB_REF_NAME#v}"
           if [ "$PACKAGED" != "$TAGGED" ]; then
             echo "Tag $GITHUB_REF_NAME says $TAGGED but the build produced $PACKAGED."
-            echo "Update NEAT_DNFS_VERSION_* in neat-dnfs/CMakeLists.txt, or retag."
+            echo "Update NEAT_DNFS_VERSION_* in mo-neat-dnfs/CMakeLists.txt, or retag."
             exit 1
           fi
 
@@ -193,9 +193,9 @@ jobs:
           # See the nullglob comment in "Check the tag matches the packaged
           # version" above -- same reason this avoids `ls`.
           shopt -s nullglob
-          CANDIDATES=("$PWD"/neat-dnfs/package/neat-dnfs-*.zip "$PWD"/neat-dnfs/package/neat-dnfs-*.tar.gz)
+          CANDIDATES=("$PWD"/mo-neat-dnfs/package/mo-neat-dnfs-*.zip "$PWD"/mo-neat-dnfs/package/mo-neat-dnfs-*.tar.gz)
           if [ "${#CANDIDATES[@]}" -eq 0 ]; then
-            echo "No package archive found under neat-dnfs/package/."
+            echo "No package archive found under mo-neat-dnfs/package/."
             exit 1
           fi
           ARCHIVE="${CANDIDATES[0]}"
@@ -212,12 +212,12 @@ jobs:
           if [ "${{ runner.os }}" = "Windows" ]; then EXE=".exe"; else EXE=""; fi
 
           cd "$WORKDIR"
-          "$BIN/neat-dnfs-evol$EXE" --list
-          # Reads config/neat_dnfs.json plus config/solutions/xor.json, then
+          "$BIN/mo-neat-dnfs-evol$EXE" --list
+          # Reads config/mo_neat_dnfs.json plus config/solutions/xor.json, then
           # writes results; a tiny population keeps this to a few seconds.
-          "$BIN/neat-dnfs-evol$EXE" --task xor --runs 1 --pop 4 --gens 1
+          "$BIN/mo-neat-dnfs-evol$EXE" --task xor --runs 1 --pop 4 --gens 1
           # Reads templates/and.json.
-          "$BIN/neat-dnfs-sol-eval$EXE" --task and --evals 1
+          "$BIN/mo-neat-dnfs-sol-eval$EXE" --task and --evals 1
 
           # Results belong in the directory the user ran from -- not in the
           # package, and not in the source tree the binary was built from.
@@ -227,10 +227,10 @@ jobs:
       - name: Upload archive
         uses: actions/upload-artifact@v4
         with:
-          name: neat-dnfs-${{ matrix.label }}
+          name: mo-neat-dnfs-${{ matrix.label }}
           path: |
-            neat-dnfs/package/neat-dnfs-*.zip
-            neat-dnfs/package/neat-dnfs-*.tar.gz
+            mo-neat-dnfs/package/mo-neat-dnfs-*.zip
+            mo-neat-dnfs/package/mo-neat-dnfs-*.tar.gz
           if-no-files-found: error
 
   # ── Publish ────────────────────────────────────────────────────────────────

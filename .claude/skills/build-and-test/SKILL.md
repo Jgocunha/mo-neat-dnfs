@@ -1,13 +1,13 @@
 ---
 name: build-and-test
-description: Configure, build and test neat-dnfs. Use whenever you need to compile the project, run the Catch2 suite, verify a change builds, or reproduce a test failure.
+description: Configure, build and test mo-neat-dnfs. Use whenever you need to compile the project, run the Catch2 suite, verify a change builds, or reproduce a test failure.
 ---
 
 # Build and test
 
 ## Where things are
 
-All commands run from the **nested project root**, `neat-dnfs/` inside the repository - not the
+All commands run from the **nested project root**, `mo-neat-dnfs/` inside the repository - not the
 repository root. The repository root holds `README.md` and `.claude/`; `CMakeLists.txt` is one
 level down.
 
@@ -59,14 +59,14 @@ Debug leg - CI does, and it roughly halves the time.
 Once a tree exists, build a single target directly rather than re-running the script:
 
 ```bash
-cmake --build build/x64-release --config Release --target neat-dnfs-test --parallel 4
+cmake --build build/x64-release --config Release --target mo-neat-dnfs-test --parallel 4
 ```
 
 **Cap parallelism at 4.** Several agents may be building on the same machine at once;
 unbounded `--parallel` oversubscribes every core and slows all of them down.
 
-Targets: `neat-dnfs-test`, `neat-dnfs` (the library), `neat-dnfs-evol`, `neat-dnfs-inc-evol`,
-`neat-dnfs-sol-eval`.
+Targets: `mo-neat-dnfs-test`, `mo-neat-dnfs` (the library), `mo-neat-dnfs-evol`, `mo-neat-dnfs-inc-evol`,
+`mo-neat-dnfs-sol-eval`.
 
 A cold build takes several minutes - run it in the background rather than blocking on a
 foreground timeout.
@@ -79,7 +79,7 @@ Run `ctest` from inside the build tree. **There are two lanes**, and picking the
 the most common mistake here:
 
 ```bash
-ctest -C Release -LE slow --output-on-failure --parallel   # fast lane - 196 tests, <10s
+ctest -C Release -LE slow --output-on-failure --parallel   # fast lane - 207 tests at the split, <1 min
 ctest -C Release -L  slow --output-on-failure --parallel   # [Evolution] tier - tens of seconds
 ctest -C Release        --output-on-failure --parallel     # everything
 ```
@@ -101,9 +101,9 @@ set "PATH=%VCPKG_ROOT%/installed/x64-windows/bin;%PATH%"
 For the TDD inner loop, run the Catch2 binary directly with a tag or name filter:
 
 ```bash
-./build/x64-release/Release/neat-dnfs-test.exe "[Population]"
-./build/x64-release/Release/neat-dnfs-test.exe --list-tests
-./build/x64-release/Release/neat-dnfs-test.exe "[Evolution]" --order rand --rng-seed 12345
+./build/x64-release/Release/mo-neat-dnfs-test.exe "[Population]"
+./build/x64-release/Release/mo-neat-dnfs-test.exe --list-tests
+./build/x64-release/Release/mo-neat-dnfs-test.exe "[Evolution]" --order rand --rng-seed 12345
 ```
 
 Record the seed whenever you use `--order rand` - without it the run is not reproducible.

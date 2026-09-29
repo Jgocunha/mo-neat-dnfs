@@ -1,6 +1,6 @@
 ---
 name: pr
-description: Read the branch diff in neat-dnfs and print a PR title and description in chat, filling the repo's pull request template. Use when asked to write, draft or suggest a PR title/description, or "what should the PR say".
+description: Read the branch diff in mo-neat-dnfs and print a PR title and description in chat, filling the repo's pull request template. Use when asked to write, draft or suggest a PR title/description, or "what should the PR say".
 ---
 
 # PR

@@ -66,7 +66,19 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ---
 
-# Project: neat-dnfs
+# Project: mo-neat-dnfs
+
+mo-neat-dnfs is the multi-objective branch of neat-dnfs, split off at neat-dnfs v0.3.0 and
+developed separately since. The rename is project-level only (folders, CMake project/targets,
+binaries, `config/mo_neat_dnfs.json`); the C++ namespace stays `neat_dnfs` and the `NEAT_DNFS_*`
+CMake variables/macros/env vars and all output formats are unchanged. The multi-objective design
+and its implementation log are in `.claude/notes/MOO/PLAN.md` (the papers beside it are
+gitignored).
+
+**This repository is local-only: it has no git remote.** GitHub-side steps in the skills (pushing,
+`gh pr create`, CI, CodeRabbit, the Gemini doc-sync check) do not apply until a remote is added;
+work lands on local branches, one per phase, and the `pr` skill's output is a description to keep,
+not a PR to open.
 
 Everything above is general engineering guidance. Everything below is specific to this
 repository and takes precedence where the two overlap.
@@ -77,7 +89,7 @@ The git root holds `README.md`, `CHANGELOG.md`, `codecov.yml`, `.coderabbit.yaml
 and `.claude/`. The project itself is nested one level down:
 
 ```text
-neat-dnfs/
+mo-neat-dnfs/
 |-- include/          public headers - Doxygen lives here
 |   |-- neat/         connection_gene, field_gene, genome, population,
 |   |                 population_file_manager, solution, species
@@ -87,7 +99,7 @@ neat-dnfs/
 |   |                 config_loader.h resource_paths.h solution_registry.h
 |   +-- constants.h
 |-- src/              mirrors include/
-|-- tests/            Catch2 -> target neat-dnfs-test
+|-- tests/            Catch2 -> target mo-neat-dnfs-test
 |-- apps/             3 executables; apps/README.md documents the CLI
 |-- config/           runtime hyperparameter JSON
 |-- templates/        starting-solution JSONs
@@ -105,7 +117,7 @@ Use the `build-and-test` skill. Two facts that bite:
 - **`CMakeLists.txt` lists every test source explicitly.** There is no `GLOB` anywhere in this
   project. A new file under `tests/` that isn't added to that list is silently never compiled,
   and the suite goes green without ever having run it.
-- **CTest has two lanes.** `ctest -LE slow` is the default lane - 196 tests, under ten seconds.
+- **CTest has two lanes.** `ctest -LE slow` is the default lane - 207 tests at the split (205 `fast.` + 2 `golden.`), under a minute.
   `ctest -L slow` is the `[Evolution]` tier - it runs real `Population::evolve()` at
   populationSize=50 / numGenerations=10 / numRuns=5 per solution, so it takes tens of seconds
   and it is *stochastic* - re-run, and check against unmodified `main`, before reading a
@@ -165,20 +177,20 @@ conversation that produced it:
 | Only true of this machine (toolchain versions, install locations, local paths) | `.claude/local-notes/` - gitignored |
 
 **Temp files** go to **`<git root>/.claude/temp/`** - the `.claude/` beside `README.md`, *not*
-one inside `neat-dnfs/`. Its contents are gitignored. If it does not exist, create it **with an
+one inside `mo-neat-dnfs/`. Its contents are gitignored. If it does not exist, create it **with an
 absolute path**: a relative `mkdir -p .claude/temp` run from the nested project root silently
 creates a second, wrong `.claude/` one level down. That has already happened here - the stray
-`neat-dnfs/.claude/temp/segv/` is what it looks like. Never scatter scratch files
+`mo-neat-dnfs/.claude/temp/segv/` is what it looks like. Never scatter scratch files
 through the project tree.
 
 **Doxygen** - new or changed public entities under `include/` need `@brief`, one `@param` per
 parameter, and `@return` unless void. This is enforced: `gemini-doc-sync.yml` runs a
-completeness check on every PR touching `neat-dnfs/include/**`.
+completeness check on every PR touching `mo-neat-dnfs/include/**`.
 
 **Behaviour is JSON-driven, not compiled in.** Hyperparameters load at runtime, later wins:
 
 ```text
-config/neat_dnfs.json -> config/solutions/<task>.json -> config/ablations/<name>.json -> CLI flags
+config/mo_neat_dnfs.json -> config/solutions/<task>.json -> config/ablations/<name>.json -> CLI flags
 ```
 
 `apps/README.md` documents the flags and worked examples. Changing a default usually means
@@ -205,6 +217,6 @@ PRs - concise title, and the body fills `.github/PULL_REQUEST_TEMPLATE.md`.
 
 ## Release (maintainers)
 
-Version lives in `neat-dnfs/CMakeLists.txt` (`NEAT_DNFS_VERSION_MAJOR` / `MINOR` / `PATCH`).
+Version lives in `mo-neat-dnfs/CMakeLists.txt` (`NEAT_DNFS_VERSION_MAJOR` / `MINOR` / `PATCH`).
 Bump per SemVer, add a `CHANGELOG.md` entry, commit `release: vX.Y.Z`, then tag and push -
 `release.yml` triggers on the tag and **refuses a tag that disagrees with `NEAT_DNFS_VERSION`**.

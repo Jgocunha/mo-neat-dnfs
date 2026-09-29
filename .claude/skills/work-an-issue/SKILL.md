@@ -1,6 +1,6 @@
 ---
 name: work-an-issue
-description: End-to-end workflow for resolving one GitHub issue in neat-dnfs - branch, TDD, build, review, docs, PR. Use when asked to fix, implement, or close a specific issue number.
+description: End-to-end workflow for resolving one GitHub issue in mo-neat-dnfs - branch, TDD, build, review, docs, PR. Use when asked to fix, implement, or close a specific issue number.
 argument-hint: <issue-number>
 ---
 
@@ -93,7 +93,7 @@ config JSON, and no stale references left behind.
 ## 9. Changelog
 
 Add an entry under `[Unreleased]` in the **git-root** `CHANGELOG.md` - the one beside
-`README.md`, not inside `neat-dnfs/`. Create the `[Unreleased]` heading if the last release
+`README.md`, not inside `mo-neat-dnfs/`. Create the `[Unreleased]` heading if the last release
 consumed it; it is often empty between releases.
 
 Pick the subsection matching the work. The file uses `Added`, `Changed`, `Fixed`, `Removed`
