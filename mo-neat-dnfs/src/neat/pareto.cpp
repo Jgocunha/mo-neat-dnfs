@@ -12,17 +12,22 @@ namespace neat_dnfs
     {
         constexpr double infinity = std::numeric_limits<double>::infinity();
 
+        /// Who dominates whom: dominatedBy[i] lists the points i dominates, and
+        /// dominationCount[j] counts the points that dominate j.
         struct DominationGraph
         {
             std::vector<std::vector<size_t>> dominatedBy;
             std::vector<size_t> dominationCount;
         };
 
+        /// A point is feasible when it violates no constraint.
         bool isFeasible(const RankedPoint& point)
         {
             return point.violation <= 0.0;
         }
 
+        /// True when every objective of a and b differs by at most epsilon; the archive
+        /// treats such an entry as a duplicate even though neither dominates the other.
         bool equalWithin(std::span<const double> a, std::span<const double> b, const double epsilon)
         {
             return std::ranges::equal(a, b, [epsilon](const double x, const double y)
@@ -31,6 +36,7 @@ namespace neat_dnfs
                 });
         }
 
+        /// 0, 1, ..., count - 1.
         std::vector<size_t> indicesUpTo(const size_t count)
         {
             std::vector<size_t> indices(count);
@@ -38,6 +44,7 @@ namespace neat_dnfs
             return indices;
         }
 
+        /// The archive's members as the ranking functions see them.
         std::vector<RankedPoint> toRankedPoints(const std::vector<ParetoArchiveEntry>& entries)
         {
             std::vector<RankedPoint> points;
@@ -49,6 +56,8 @@ namespace neat_dnfs
             return points;
         }
 
+        /// One pass over every pair (O(m N^2)), the input of the front-peeling loop in
+        /// nonDominatedSort().
         DominationGraph buildDominationGraph(std::span<const RankedPoint> points, const double epsilon)
         {
             const size_t count = points.size();

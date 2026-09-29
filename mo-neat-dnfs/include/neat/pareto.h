@@ -123,7 +123,10 @@ namespace neat_dnfs
         std::vector<ParetoArchiveEntry> entries;
         double lowestViolation;
 
+        /// Whether some member dominates @p entry or equals it within @p epsilon on every
+        /// objective -- either way the entry adds nothing to the archive.
         [[nodiscard]] bool isDominatedOrMatched(const ParetoArchiveEntry& entry, double epsilon) const;
+        /// Drops every member that @p entry dominates, before @p entry is added.
         void removeDominatedBy(const ParetoArchiveEntry& entry, double epsilon);
         /// Index of the member to evict when over capacity: the smallest crowding
         /// distance, or the newest member when every member is a boundary point.

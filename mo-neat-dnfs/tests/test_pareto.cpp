@@ -13,6 +13,7 @@ namespace
 {
     constexpr double infinity = std::numeric_limits<double>::infinity();
 
+    // Points with no constraint violation, so the sort reduces to plain (epsilon-)dominance.
     std::vector<RankedPoint> feasiblePoints(const std::vector<std::vector<double>>& objectives)
     {
         std::vector<RankedPoint> points;
@@ -21,12 +22,15 @@ namespace
         return points;
     }
 
+    // An archive entry whose partials equal its objectives; only id, objectives and
+    // violation matter to the archive.
     ParetoArchiveEntry entryAt(const int solutionId, const std::vector<double>& objectives,
         const double violation = 0.0)
     {
         return { solutionId, 1, 1, objectives, objectives, 0.5, violation };
     }
 
+    // Member ids sorted, so assertions do not depend on insertion or eviction order.
     std::vector<int> memberIds(const ParetoArchive& archive)
     {
         std::vector<int> ids;
