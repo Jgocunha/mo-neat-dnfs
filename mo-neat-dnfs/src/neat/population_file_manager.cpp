@@ -477,16 +477,19 @@ namespace neat_dnfs
 
 	namespace
 	{
+		// The same spelling the config uses for SelectionConstants.mode.
 		std::string selectionModeName(const SelectionMode mode)
 		{
 			return mode == SelectionMode::Pareto ? "pareto" : "scalar";
 		}
 
+		// JSON has no infinity: a boundary point's crowding distance is written as null.
 		nlohmann::json finiteOrNull(const double value)
 		{
 			return std::isfinite(value) ? nlohmann::json(value) : nlohmann::json(nullptr);
 		}
 
+		// One entry of a generation record's "individuals" array.
 		nlohmann::json toObjectivesJson(const Solution& solution)
 		{
 			const auto parameters = solution.getParameters();

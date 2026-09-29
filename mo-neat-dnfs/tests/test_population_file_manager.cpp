@@ -5,6 +5,7 @@
 #include <fstream>
 #include <ctime>
 #include <array>
+#include <mutex>
 #include <unordered_set>
 
 #include "neat/pareto.h"
@@ -111,6 +112,8 @@ namespace
         void createPhenotypeEnvironment() override {}
     };
 
+    // Sets the groups, floor and saveObjectives a test needs, and restores the
+    // defaults afterwards even if the test fails.
     struct ScopedSelectionSettings
     {
         ScopedSelectionSettings(std::vector<std::vector<size_t>> groups, const double floor, const bool saveObjectives)
@@ -130,6 +133,7 @@ namespace
         ScopedSelectionSettings& operator=(ScopedSelectionSettings&&) = delete;
     };
 
+    // Every non-empty line of a JSON-lines file, parsed.
     std::vector<nlohmann::json> readJsonLines(const std::string& path)
     {
         std::ifstream file(path);
@@ -145,6 +149,7 @@ namespace
         return records;
     }
 
+    // An objectives.jsonl individual as constrainedDominates() sees it.
     RankedPoint rankedPointOf(const nlohmann::json& individual)
     {
         return { individual.at("objectives").get<std::vector<double>>(), individual.at("violation").get<double>() };
@@ -460,6 +465,78 @@ TEST_CASE("PopulationFileManager writes no objectives.jsonl when saveObjectives 
     REQUIRE(!runDirectory.empty());
     REQUIRE(std::filesystem::exists(runDirectory + "overview.jsonl"));
     REQUIRE_FALSE(std::filesystem::exists(runDirectory + "objectives.jsonl"));
+
+    std::filesystem::remove_all(runDirectory);
+}
+
+namespace
+{
+    // Blocks objectives.jsonl mid-run: the first evaluation, which happens after
+    // setFileDirectory() and before the first save, creates a *directory* of that name
+    // in the newest run folder, so the file manager cannot open the file.
+    class ObjectivesBlockingSolution final : public Solution
+    {
+    public:
+        explicit ObjectivesBlockingSolution(const SolutionTopology& topology)
+            : Solution(topology)
+        {
+            name = "FixedFitnessBlockedObjectives";
+        }
+
+        SolutionPtr clone() const override
+        {
+            return std::make_shared<ObjectivesBlockingSolution>(initialTopology);
+        }
+
+        SolutionPtr copy() const override
+        {
+            return clone();
+        }
+
+        static std::once_flag blocked;
+
+    private:
+        void testPhenotype() override
+        {
+            std::call_once(blocked, [this]()
+                {
+                    std::filesystem::path newest;
+                    for (const auto& entry : std::filesystem::directory_iterator(paths::dataRoot() / "data" / name))
+                    {
+                        if (entry.is_directory() && (newest.empty()
+                            || entry.last_write_time() > std::filesystem::last_write_time(newest)))
+                        {
+                            newest = entry.path();
+                        }
+                    }
+                    std::filesystem::create_directories(newest / "objectives.jsonl");
+                });
+            parameters.fitness = 0.5;
+        }
+
+        void createPhenotypeEnvironment() override {}
+    };
+
+    std::once_flag ObjectivesBlockingSolution::blocked;
+}
+
+TEST_CASE("PopulationFileManager keeps running when objectives.jsonl cannot be opened", "[PopulationFileManager]")
+{
+    const ScopedSelectionSettings settings({}, 0.0, true);
+    const PopulationParameters parameters(5, 2, 1.1);
+    const std::string solutionName = "FixedFitnessBlockedObjectives";
+    const auto initialSolution = std::make_shared<ObjectivesBlockingSolution>(makeTopology(1, 1));
+
+    Population population(parameters, initialSolution);
+    population.initialize();
+    const auto preExisting = existingRunDirs(solutionName);
+
+    REQUIRE_NOTHROW(population.evolve());
+
+    const std::string runDirectory = newlyCreatedRunDirectory(solutionName, preExisting);
+    REQUIRE(!runDirectory.empty());
+    REQUIRE(std::filesystem::is_directory(runDirectory + "objectives.jsonl"));
+    REQUIRE(readJsonLines(runDirectory + "overview.jsonl").size() == 2);
 
     std::filesystem::remove_all(runDirectory);
 }

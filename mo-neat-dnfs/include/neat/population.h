@@ -217,6 +217,10 @@ namespace neat_dnfs
 		/// written into each solution's parameters, then offers front 0 to the archive.
 		/// Draws no random numbers. Runs on the main thread, after evaluate().
 		void rankObjectives();
+		/// @brief Offers each member of @p front to the Pareto archive and records the ids it
+		/// accepts this generation in acceptedIntoArchive.
+		/// @param points The ranked population, indexed like solutions.
+		/// @param front Indices of front 0.
 		void offerFrontToArchive(std::span<const RankedPoint> points, std::span<const size_t> front);
 		void speciate();
 		void reproduceAndSelect();
