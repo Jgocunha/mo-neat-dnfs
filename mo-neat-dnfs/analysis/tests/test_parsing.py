@@ -3,22 +3,27 @@ import json
 import pandas as pd
 import pytest
 
+from viz.cache import _fingerprint_dir
 from viz.parsing import (
     _extract_mutation_events,
     _sample_evenly,
     categorize_mutation,
     compute_partial_fitness,
+    compute_population_objectives,
     compute_population_distributions,
     compute_species_meta,
     compute_topology_trajectory,
     find_experiment_dirs,
     find_runs_with_overview,
+    find_solution_blob_in_generation,
     first_crossing_per_component,
     format_ram_bytes,
     generations_all_partial_meet_targets,
     generations_meeting_targets,
     get_best_solution_id,
     list_champion_generations,
+    load_objectives,
+    load_pareto_population,
     load_run_metadata,
     parse_overview_line,
     parse_species_header,
@@ -579,3 +584,138 @@ def test_format_ram_bytes_returns_none_for_missing_or_non_numeric():
     assert format_ram_bytes(None) is None
     assert format_ram_bytes("not a number") is None
     assert format_ram_bytes(0) is None
+
+
+def _write_partials_line(path, sol_id, fitness, partials, species):
+    parts = "".join(f"{p}, " for p in partials)
+    line = (
+        f"solution {sol_id} [ fit.: {fitness}, part.: ({parts}) spec.: {species}, adj.fit.: 0.0, "
+        f"age: 1, (0, 0), genome ( 3 field genes, 0 connection genes ) "
+        f"field genes {{fg (id: 1, type: INPUT), }} connection genes {{}}, last mutations{{}}]\n"
+    )
+    with open(path, "a") as f:
+        f.write(line)
+
+
+def test_compute_population_objectives_reads_every_individual_from_statistics(tmp_path):
+    run_dir = tmp_path / "run"
+    stats_dir = run_dir / "statistics"
+    stats_dir.mkdir(parents=True)
+    _write_partials_line(stats_dir / "generation_1.txt", 4, 0.5, [0.2, 1, 0.3], 0)
+    _write_partials_line(stats_dir / "generation_1.txt", 7, 0.6, [0.9, 0.1, 0.8], 2)
+    _write_partials_line(stats_dir / "generation_2.txt", 9, 0.7, [0.5, 0.5, 0.5], 2)
+
+    obj_df = compute_population_objectives(str(run_dir), (0, 1))
+
+    assert list(obj_df.columns) == ["generation", "id", "species", "fitness", "p1", "p2", "p3"]
+    assert obj_df["generation"].tolist() == [0, 0, 1]
+    assert obj_df["id"].tolist() == [4, 7, 9]
+    assert obj_df["species"].tolist() == [0, 2, 2]
+    assert obj_df.loc[1, ["p1", "p2", "p3"]].tolist() == [0.9, 0.1, 0.8]
+    assert compute_population_objectives(str(run_dir), (1,))["id"].tolist() == [9]
+
+
+def test_statistics_scan_cache_from_an_older_parser_version_is_a_miss(tmp_path):
+    run_dir = tmp_path / "run"
+    stats_dir = run_dir / "statistics"
+    stats_dir.mkdir(parents=True)
+    _write_partials_line(stats_dir / "generation_1.txt", 4, 0.5, [0.2, 0.8], 0)
+    fingerprint = _fingerprint_dir(stats_dir, "generation_*.txt")
+    stale_fingerprint = "v2:" + fingerprint.split(":", 1)[1]
+    cache_dir = run_dir / ".viz_cache"
+    cache_dir.mkdir()
+    # A pre-Pareto cache: same files, older parser version, and no per-individual table.
+    (cache_dir / "statistics_scan.meta.json").write_text(json.dumps({"fingerprint": stale_fingerprint, "has_partial": True}))
+    pd.DataFrame().to_parquet(cache_dir / "statistics_scan.mut.parquet")
+    pd.DataFrame({"generation": [0], "fitness": [0.1], "age": [1], "genome_size": [3]}).to_parquet(cache_dir / "statistics_scan.dist.parquet")
+    assert not fingerprint.startswith("v2:")
+
+    obj_df = compute_population_objectives(str(run_dir), (0,))
+
+    assert obj_df["id"].tolist() == [4]
+    meta = json.loads((cache_dir / "statistics_scan.meta.json").read_text())
+    assert meta["fingerprint"] == fingerprint
+    assert (cache_dir / "statistics_scan.obj.parquet").exists()
+
+
+def _objectives_record(generation, individuals, archive_size, accepted):
+    return {
+        "generation": generation,
+        "mode": "pareto",
+        "epsilon": 0.01,
+        "feasibilityFloor": 0.1,
+        "objectiveGroups": [[0, 2], [1]],
+        "individuals": individuals,
+        "archive": {"size": archive_size, "acceptedThisGeneration": accepted},
+    }
+
+
+def _objectives_individual(sol_id, partials, objectives, rank, crowding):
+    return {
+        "id": sol_id, "species": 1, "fitness": sum(partials) / len(partials), "partialFitness": partials,
+        "objectives": objectives, "rank": rank, "crowding": crowding, "violation": 0.0,
+    }
+
+
+def test_load_objectives_reads_settings_individuals_and_archive(tmp_path):
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    lines = [
+        _objectives_record(0, [
+            _objectives_individual(1, [0.2, 0.4, 0.6], [0.4, 0.4], 0, None),
+            _objectives_individual(2, [0.1, 0.1, 0.1], [0.1, 0.1], 1, None),
+        ], 1, [1]),
+        _objectives_record(1, [_objectives_individual(3, [0.9, 0.9, 0.9], [0.9, 0.9], 0, 0.5)], 1, [3]),
+    ]
+    (run_dir / "objectives.jsonl").write_text("\n".join(json.dumps(line) for line in lines) + "\n")
+
+    loaded = load_objectives(str(run_dir))
+
+    assert loaded.settings == {"mode": "pareto", "epsilon": 0.01, "feasibility_floor": 0.1, "objective_groups": [[0, 2], [1]]}
+    individuals = loaded.individuals
+    assert list(individuals.columns) == [
+        "generation", "id", "species", "fitness", "p1", "p2", "p3", "o1", "o2", "rank", "crowding", "violation"
+    ]
+    assert individuals["id"].tolist() == [1, 2, 3]
+    assert individuals["crowding"].tolist()[:2] == [float("inf"), float("inf")]  # null = boundary point
+    assert individuals.loc[2, "crowding"] == 0.5
+    assert loaded.archive.to_dict("records") == [
+        {"generation": 0, "size": 1, "accepted": 1},
+        {"generation": 1, "size": 1, "accepted": 1},
+    ]
+
+
+def test_load_objectives_returns_none_without_the_file(tmp_path):
+    assert load_objectives(str(tmp_path)) is None
+
+
+def test_load_pareto_population_prefers_objectives_jsonl_and_falls_back_to_statistics(tmp_path):
+    run_dir = tmp_path / "run"
+    stats_dir = run_dir / "statistics"
+    stats_dir.mkdir(parents=True)
+    _write_partials_line(stats_dir / "generation_1.txt", 4, 0.5, [0.2, 0.8], 0)
+
+    fallback, recorded = load_pareto_population(str(run_dir))
+    assert recorded is None
+    assert fallback["id"].tolist() == [4]
+
+    newer_dir = tmp_path / "newer"
+    newer_dir.mkdir()
+    line = _objectives_record(0, [_objectives_individual(9, [0.2, 0.4, 0.6], [0.4, 0.4], 0, None)], 1, [9])
+    (newer_dir / "objectives.jsonl").write_text(json.dumps(line) + "\n")
+    individuals, recorded = load_pareto_population(str(newer_dir))
+    assert recorded is not None
+    assert individuals["id"].tolist() == [9]
+
+
+def test_find_solution_blob_in_generation(tmp_path):
+    run_dir = tmp_path / "run"
+    stats_dir = run_dir / "statistics"
+    stats_dir.mkdir(parents=True)
+    _write_partials_line(stats_dir / "generation_2.txt", 4, 0.5, [0.2, 0.8], 0)
+    _write_partials_line(stats_dir / "generation_2.txt", 41, 0.6, [0.3, 0.8], 1)
+
+    blob = find_solution_blob_in_generation(str(run_dir), 1, 41)
+    assert blob.startswith("solution 41 [") and blob.endswith("]")
+    assert find_solution_blob_in_generation(str(run_dir), 1, 7) is None
+    assert find_solution_blob_in_generation(str(run_dir), 5, 41) is None
