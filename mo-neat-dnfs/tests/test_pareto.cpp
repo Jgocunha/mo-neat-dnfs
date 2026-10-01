@@ -348,6 +348,11 @@ TEST_CASE("ParetoArchive evicts the members a new entry dominates", "[Pareto]")
     REQUIRE(memberIds(archive) == std::vector<int>{ 3, 4 });
 }
 
+TEST_CASE("ParetoArchive rejects a capacity of zero", "[Pareto]")
+{
+    REQUIRE_THROWS_AS(ParetoArchive(0), std::invalid_argument);
+}
+
 TEST_CASE("ParetoArchive truncates at capacity by crowding and keeps boundary points", "[Pareto]")
 {
     ParetoArchive archive(3);

@@ -1968,7 +1968,7 @@ def _cached_generation_metrics(run_path: str, groups_key: tuple, epsilon: float,
     return generation_metrics(individuals, generations, groups, recorded_groups, epsilon, floor)
 
 
-def _render_front0_table(members: pd.DataFrame, space, summary: dict, run_path: str, generation0: int) -> None:
+def _render_front0_table(members: pd.DataFrame, space, summary: dict, run_path: str, generation0: int, key_prefix: str) -> None:
     front0 = summary["ranks"] == 0
     table = pd.DataFrame(space.values[front0], columns=space.labels)
     crowding = summary["crowding"][front0]
@@ -1985,7 +1985,7 @@ def _render_front0_table(members: pd.DataFrame, space, summary: dict, run_path: 
     }
     event = st.dataframe(
         table, width="stretch", hide_index=True, column_config=column_config,
-        on_select="rerun", selection_mode="single-row", key="pareto_front0_table",
+        on_select="rerun", selection_mode="single-row", key=f"{key_prefix}_front0_table",
     )
     selected_rows = event.selection.rows if event is not None else []
     if not selected_rows:
@@ -1996,12 +1996,12 @@ def _render_front0_table(members: pd.DataFrame, space, summary: dict, run_path: 
     _render_solution_record(find_solution_blob_in_generation(run_path, generation0, solution_id))
 
 
-def _render_generation_charts(members: pd.DataFrame, space, summary: dict, mode: str) -> tuple[int, int]:
+def _render_generation_charts(members: pd.DataFrame, space, summary: dict, mode: str, key_prefix: str) -> tuple[int, int]:
     """The selected generation on two objectives, on every raw partial, and (for 3-8 objectives)
     as a scatter matrix. Returns the chosen (x, y) objective indices for the later sections."""
     labels = space.labels
-    x_index, y_index = _objective_pickers(labels, "pareto")
-    color_by = st.radio("Color by", ["front", "species"], key="pareto_color", horizontal=True)
+    x_index, y_index = _objective_pickers(labels, key_prefix)
+    color_by = st.radio("Color by", ["front", "species"], key=f"{key_prefix}_color", horizontal=True)
 
     population = _population_frame(members, np.clip(space.values, 0, 1), summary, x_index, y_index)
     front0_xy = population[population["rank"] == 0][["x", "y"]].to_numpy()
@@ -2028,13 +2028,13 @@ def _render_generation_charts(members: pd.DataFrame, space, summary: dict, mode:
 
 
 def _render_over_generations(run_path: str, generations: list[int], settings: tuple, labels: list[str],
-                             axis: tuple[int, int], mode: str) -> None:
+                             axis: tuple[int, int], mode: str, key_prefix: str) -> None:
     """Front 0 of sampled generations on the chosen pair, and the headline metrics over time."""
     groups, epsilon, floor = settings
     groups_key = tuple(tuple(g) for g in groups)
     x_index, y_index = axis
     st.markdown("### Over generations")
-    step, _ = _render_sampling_controls("pareto_sampling", len(generations), include_max_solutions=False)
+    step, _ = _render_sampling_controls(f"{key_prefix}_sampling", len(generations), include_max_solutions=False)
     sampled = tuple(_sampled_generations(generations, step))
 
     points, steps = _cached_front_evolution(run_path, groups_key, epsilon, floor, sampled, x_index, y_index)
@@ -2076,11 +2076,14 @@ def render_pareto_view(selected_run_path: str):
     generations = sorted(int(g) for g in individuals["generation"].unique())
     recorded_groups, _, _ = _recorded_settings(recorded)
 
-    settings = _render_space_settings(len(partial_columns), recorded, "pareto")
+    # Widget state is per run: a key shared across runs would carry the previous run's grouping,
+    # epsilon and floor over instead of defaulting to this run's recorded settings.
+    key_prefix = f"pareto|{selected_run_path}"
+    settings = _render_space_settings(len(partial_columns), recorded, key_prefix)
     if settings is None:
         return
     groups, epsilon, floor = settings
-    generation0 = _generation_slider(generations, "pareto_generation")
+    generation0 = _generation_slider(generations, f"{key_prefix}_generation")
 
     members = individuals[individuals["generation"] == generation0].reset_index(drop=True)
     _warn_if_outside_unit_interval(members)
@@ -2092,19 +2095,19 @@ def render_pareto_view(selected_run_path: str):
     st.divider()
     if len(space.labels) < 2:
         st.info("Only one objective in this space, so there is no trade-off to plot. Use more groups or the raw partials.")
-        return
-    mode = theme_type()
-    axis = _render_generation_charts(members, space, summary, mode)
+    else:
+        mode = theme_type()
+        axis = _render_generation_charts(members, space, summary, mode, key_prefix)
 
-    st.divider()
-    _render_over_generations(selected_run_path, generations, (groups, epsilon, floor), space.labels, axis, mode)
+        st.divider()
+        _render_over_generations(selected_run_path, generations, (groups, epsilon, floor), space.labels, axis, mode, key_prefix)
 
-    st.divider()
-    _render_objective_conflict(individuals, groups, recorded_groups, space.labels, mode)
+        st.divider()
+        _render_objective_conflict(individuals, groups, recorded_groups, space.labels, mode)
 
     st.divider()
     st.markdown(f"### Front 0 of generation {display_gen(generation0)}")
-    _render_front0_table(members, space, summary, selected_run_path, generation0)
+    _render_front0_table(members, space, summary, selected_run_path, generation0, key_prefix)
 
 
 def _final_front(run_path: str, partial_count: int, groups: list[list[int]], epsilon: float, floor: float):
@@ -2130,6 +2133,17 @@ def _first_run_partial_count(run_paths) -> tuple[int, object]:
     return 0, None
 
 
+def _first_experiment_with_objectives(selected_names: list[str], experiment_paths: dict) -> tuple[str | None, int, object]:
+    """(name, partial count, recorded objectives) of the first selected experiment with objective
+    data, so an older experiment listed first does not hide the comparison."""
+    for name in selected_names:
+        run_paths = [path for _, path in find_runs_with_overview(experiment_paths[name])]
+        partial_count, recorded = _first_run_partial_count(run_paths)
+        if partial_count > 0:
+            return name, partial_count, recorded
+    return None, 0, None
+
+
 def render_experiment_pareto(base_dir_str: str):
     """Final-generation hypervolume of every run, and the union of their final fronts."""
     if not st.toggle("Pareto fronts across runs", key="experiment_pareto", help="Ranks every run's final generation; the first time, older runs need a full statistics/ scan."):
@@ -2139,7 +2153,8 @@ def render_experiment_pareto(base_dir_str: str):
     if partial_count == 0:
         st.info("No run in this experiment has objective data.")
         return
-    settings = _render_space_settings(partial_count, recorded, "experiment_pareto")
+    key_prefix = f"experiment_pareto|{base_dir_str}"
+    settings = _render_space_settings(partial_count, recorded, key_prefix)
     if settings is None:
         return
     groups, epsilon, floor = settings
@@ -2160,7 +2175,7 @@ def render_experiment_pareto(base_dir_str: str):
     col_hv, col_union = st.columns([1, 3])
     col_hv.altair_chart(chart_hypervolume_by_run(pd.DataFrame(hv_rows), estimate))
     with col_union:
-        x_index, y_index = _objective_pickers(labels, "experiment_pareto")
+        x_index, y_index = _objective_pickers(labels, key_prefix)
         x_label, y_label = labels[x_index], labels[y_index]
         points = pd.concat(
             [pd.DataFrame(values[:, [x_index, y_index]], columns=["x", "y"]).assign(run=name) for name, values in point_frames],
@@ -2175,10 +2190,9 @@ def render_cross_experiment_pareto(selected_names: list[str], experiment_paths: 
     different objective spaces is not comparable."""
     if not st.toggle("Compare final hypervolume", key="compare_pareto", help="Ranks every run's final generation; older runs need a full statistics/ scan the first time."):
         return
-    first_paths = [path for _, path in find_runs_with_overview(experiment_paths[selected_names[0]])]
-    partial_count, recorded = _first_run_partial_count(first_paths)
-    if partial_count == 0:
-        st.info("The first selected experiment has no objective data.")
+    source_name, partial_count, recorded = _first_experiment_with_objectives(selected_names, experiment_paths)
+    if source_name is None:
+        st.info("None of the selected experiments has objective data.")
         return
     settings = _render_space_settings(partial_count, recorded, "compare_pareto")
     if settings is None:
@@ -2199,7 +2213,7 @@ def render_cross_experiment_pareto(selected_names: list[str], experiment_paths: 
     if skipped:
         st.caption(
             f"Skipped: {', '.join(skipped)} -- no objective data, or a different number of partials than "
-            f"{selected_names[0]} ({partial_count}), so a different task whose hypervolume is not comparable."
+            f"{source_name} ({partial_count}), so a different task whose hypervolume is not comparable."
         )
     if not plottable:
         return
