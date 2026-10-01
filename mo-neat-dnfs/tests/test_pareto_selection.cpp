@@ -85,11 +85,6 @@ namespace
         solutions[index]->initialize();
         PopulationTestAccess::evaluate(population);
     }
-
-    bool offspringHasConnection(const SolutionPtr& offspring, const ConnectionGene& gene)
-    {
-        return offspring->containsConnectionGene(gene);
-    }
 }
 
 // --- comparator (section 2, rows 1, 6, 7 and 9 all go through it) ---------------
@@ -164,10 +159,10 @@ TEST_CASE("Solution::getSelectionFitness is the fitness in scalar mode and rank-
     const auto solution = evaluatedAt({ 0.3, 0.7 }, 0.42);
     solution->setParetoRanking(2, 0.5, 0.0, 0.25);
 
-    REQUIRE(solution->getSelectionFitness() == 0.42);
+    REQUIRE(solution->getSelectionFitness() == Catch::Approx(0.42));
 
     const ScopedParetoSelection pareto;
-    REQUIRE(solution->getSelectionFitness() == 0.25);
+    REQUIRE(solution->getSelectionFitness() == Catch::Approx(0.25));
 }
 
 // --- crossover (section 2, row 7) ------------------------------------------------
@@ -216,7 +211,7 @@ TEST_CASE("Solution::crossover inherits disjoint genes at random only from equiv
         int inherited = 0;
         for (int i = 0; i < crossovers; ++i)
         {
-            if (offspringHasConnection(fitter->crossover(other), disjointGene))
+            if (fitter->crossover(other)->containsConnectionGene(disjointGene))
             {
                 ++inherited;
             }

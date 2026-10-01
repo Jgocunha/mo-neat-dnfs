@@ -263,6 +263,10 @@ namespace neat_dnfs
 		/// @param improvedSpecies Number of species that improved this generation.
 		void logParetoProgress(int improvedSpecies) const;
 		void speciate();
+		/// @brief Picks every species' champion. In scalar mode a species improves when its
+		/// champion's fitness rises; in Pareto mode when hasSpeciesImprovedOnTheFront() says so,
+		/// after which the per-generation Pareto DEBUG sentence is logged.
+		void assignChampions();
 		void reproduceAndSelect();
 
 		[[nodiscard]] bool endConditionMet() const;

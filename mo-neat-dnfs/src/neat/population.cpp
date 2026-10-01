@@ -318,24 +318,7 @@ namespace neat_dnfs
 			}
 		}
 
-		if (SelectionConstants::mode == SelectionMode::Pareto)
-		{
-			int improvedSpecies = 0;
-			for (const auto& species : speciesList)
-			{
-				const bool improved = hasSpeciesImprovedOnTheFront(*species);
-				improvedSpecies += improved ? 1 : 0;
-				species->assignChampion(improved);
-			}
-			logParetoProgress(improvedSpecies);
-		}
-		else
-		{
-			for (const auto& species : speciesList)
-			{
-				species->assignChampion();
-			}
-		}
+		assignChampions();
 
 		if (validationPolicy == ValidationPolicy::Throw)
 		{
@@ -343,6 +326,27 @@ namespace neat_dnfs
 		}
 
 		calculateAdjustedFitness();
+	}
+
+	void Population::assignChampions()
+	{
+		if (SelectionConstants::mode == SelectionMode::Scalar)
+		{
+			for (const auto& species : speciesList)
+			{
+				species->assignChampion();
+			}
+			return;
+		}
+
+		int improvedSpecies = 0;
+		for (const auto& species : speciesList)
+		{
+			const bool improved = hasSpeciesImprovedOnTheFront(*species);
+			improvedSpecies += improved ? 1 : 0;
+			species->assignChampion(improved);
+		}
+		logParetoProgress(improvedSpecies);
 	}
 
 	void Population::reproduceAndSelect()
