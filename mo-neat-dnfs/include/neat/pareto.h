@@ -61,7 +61,8 @@ namespace neat_dnfs
     /// @brief Collapses raw partial fitnesses into one objective per group.
     /// @details Each objective is the weighted mean of its group's partials, with the
     /// weights renormalised within the group; a group whose weights sum to zero uses the
-    /// plain mean. The groups are assumed to index validly into @p partials and @p weights.
+    /// plain mean. The groups are assumed to be non-empty and to index validly into
+    /// @p partials and @p weights; an empty group would divide by zero.
     /// @param partials Raw partial fitness values.
     /// @param groups Indices into @p partials, one list per objective; empty means one
     /// objective per partial.
