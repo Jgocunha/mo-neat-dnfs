@@ -36,7 +36,8 @@ Work in progress. The design, the evidence behind it and the phase-by-phase impl
   below the floor behind every feasible one.
 * **The weighted sum is still computed.** It picks the reported best solution and decides when a run
   ends, so scalar and Pareto runs stay comparable.
-* **Off by default.** A run is in Pareto mode only when its config says so.
+* **Off by default.** A run is in Pareto mode only when its config says so; `--ablation pareto-selection`
+  is the preset that does.
 
 ---
 
@@ -81,6 +82,7 @@ no published releases yet.
 mo-neat-dnfs-evol --list
 mo-neat-dnfs-evol --task xor --runs 1
 mo-neat-dnfs-evol --task and --ablation no-crossover --runs 30 --pop 500 --gens 200 --target 0.9
+mo-neat-dnfs-evol --task and --ablation pareto-selection --runs 30 --pop 500 --gens 200 --target 0.9
 ```
 
 [`mo-neat-dnfs/apps/README.md`](mo-neat-dnfs/apps/README.md) documents every flag, task, ablation preset
