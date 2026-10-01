@@ -4,9 +4,12 @@
 
 #include <filesystem>
 #include <fstream>
+#include <map>
 
 #include "constants.h"
+#include "neat_tools/ablation_presets.h"
 #include "neat_tools/config_loader.h"
+#include "neat_tools/solution_registry.h"
 #include "solutions/xor.h"
 #include "test_helpers.h"
 #include "test_stub_solution.h"
@@ -298,4 +301,77 @@ TEST_CASE("Solution::evaluate derives objectives from the partial fitnesses", "[
         REQUIRE(objectives[1] == Catch::Approx((0.20 * 0.2 + 0.20 * 0.4 + 0.25 * 0.5) / 0.65));
         REQUIRE(objectives[2] == Catch::Approx((0.6 + 0.7 + 0.8) / 3.0));
     }
+}
+
+TEST_CASE("Every task config groups its partials into the planned objectives", "[SelectionConfig]")
+{
+    // .claude/notes/MOO/PLAN.md section 3.6: each grouping was checked against a real run.
+    const std::map<std::string, std::vector<std::vector<size_t>>> plannedGroups{
+        { "and", { { 0, 2 }, { 1, 3, 4 }, { 5, 6, 7 } } },
+        { "xor", { { 0, 1, 2 }, { 3 } } },
+        { "detection-instability", { { 0, 1 }, { 2, 3 } } },
+        { "memory-instability", { { 0, 2 }, { 1, 3 } } },
+        { "selection-instability", { { 0, 1 }, { 2, 3 } } },
+        { "memory-trace", { { 0, 2 }, { 1, 3, 4 }, { 5, 6, 7 } } },
+        { "dmts", { { 0, 2, 4 }, { 1, 3, 5 } } },
+        { "ior", { { 0, 2 }, { 1, 3, 4 } } },
+    };
+    REQUIRE(plannedGroups.size() == taskEntries().size());
+
+    for (const auto& task : taskEntries())
+    {
+        const std::string slug(task.slug);
+        INFO(slug);
+        resetGlobalState();
+        const ScopedTaskConfig taskConfig{ slug };
+
+        REQUIRE(SelectionConstants::objectiveGroups == plannedGroups.at(slug));
+        REQUIRE_NOTHROW(task.makeFromTopology(defaultTopologyFor(task)));
+    }
+}
+
+TEST_CASE("ScopedTaskConfig restores the default selection settings", "[SelectionConfig]")
+{
+    resetGlobalState();
+    {
+        const ScopedTaskConfig taskConfig{ "and" };
+    }
+
+    requireDefaultSelection();
+    REQUIRE_NOTHROW(XOR(makeTopology(2, 1)));
+}
+
+TEST_CASE("The pareto-selection presets switch on Pareto selection", "[SelectionConfig]")
+{
+    const RestoreReferenceConfig restore;
+
+    SECTION("pareto-selection: epsilon 0.01, floor 0.1")
+    {
+        REQUIRE(AblationPresets::applyByName("pareto-selection"));
+
+        REQUIRE(AblationConstants::label == " Pareto");
+        REQUIRE(SelectionConstants::feasibilityFloor == Catch::Approx(0.1));
+    }
+
+    SECTION("pareto-selection-no-floor: epsilon 0.01, floor off")
+    {
+        REQUIRE(AblationPresets::applyByName("pareto-selection-no-floor"));
+
+        REQUIRE(AblationConstants::label == " Pareto NoFloor");
+        REQUIRE(SelectionConstants::feasibilityFloor == 0.0);
+    }
+
+    REQUIRE(SelectionConstants::mode == SelectionMode::Pareto);
+    REQUIRE(SelectionConstants::dominanceEpsilon == Catch::Approx(0.01));
+    REQUIRE(SelectionConstants::archiveCapacity == 100);
+}
+
+TEST_CASE("A pareto-selection preset keeps the task's objective groups", "[SelectionConfig]")
+{
+    const RestoreReferenceConfig restore;
+    ConfigLoader::loadConfig(ConfigLoader::defaultGlobalConfigPath(), "and");
+
+    REQUIRE(AblationPresets::applyByName("pareto-selection"));
+
+    REQUIRE(SelectionConstants::objectiveGroups == std::vector<std::vector<size_t>>{ { 0, 2 }, { 1, 3, 4 }, { 5, 6, 7 } });
 }

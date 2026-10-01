@@ -17,6 +17,10 @@ namespace neat_dnfs::test {
 // it *before* defaultTopologyFor(), which reads xSize, and keep it alive across
 // evaluate() too -- Solution's bump-position tolerance is xSize/20, read at
 // evaluation time.
+//
+// SelectionConstants is reset to its defaults rather than restored: a task's
+// objectiveGroups index that task's partials, so left in place they make the
+// next task with a different partial count throw at construction.
 class ScopedTaskConfig
 {
 public:
@@ -30,6 +34,7 @@ public:
     {
         DimensionConstants::xSize = previousXSize;
         DimensionConstants::dx = previousDx;
+        SelectionConstants::reset();
     }
 
     ScopedTaskConfig(const ScopedTaskConfig&) = delete;

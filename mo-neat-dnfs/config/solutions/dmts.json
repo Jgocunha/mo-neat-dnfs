@@ -5,5 +5,8 @@
   },
   "SolutionConstants": {
     "fitnessWeights": [0.1, 0.15, 0.1, 0.4, 0.1, 0.15]
+  },
+  "SelectionConstants": {
+    "objectiveGroups": [[0, 2, 4], [1, 3, 5]]
   }
 }
