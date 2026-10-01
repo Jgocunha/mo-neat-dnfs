@@ -5,8 +5,10 @@
 #include <fstream>
 #include <ctime>
 #include <array>
+#include <mutex>
 #include <unordered_set>
 
+#include "neat/pareto.h"
 #include "neat/population.h"
 #include "neat_tools/resource_paths.h"
 #include "test_helpers.h"
@@ -61,6 +63,97 @@ namespace
 
         void createPhenotypeEnvironment() override {}
     };
+
+    // Reports four partials that differ between solutions, so a population
+    // spreads over several Pareto fronts. clone() (initial population and
+    // offspring) draws the next partials from a deterministic sequence; copy()
+    // keeps them, so a preserved elite re-evaluates to the same fitness.
+    class ObjectivesSolution final : public Solution
+    {
+    public:
+        ObjectivesSolution(const SolutionTopology& topology, std::vector<double> partials, const std::string& solutionName)
+            : Solution(topology), partialsToReport(std::move(partials))
+        {
+            name = solutionName;
+            loadFitnessWeights("xor", 4);
+        }
+
+        SolutionPtr clone() const override
+        {
+            return std::make_shared<ObjectivesSolution>(initialTopology, nextPartials(), name);
+        }
+
+        SolutionPtr copy() const override
+        {
+            return std::make_shared<ObjectivesSolution>(initialTopology, partialsToReport, name);
+        }
+
+        static std::vector<double> nextPartials()
+        {
+            static int draw = 0;
+            ++draw;
+            std::vector<double> partials;
+            for (int k = 0; k < 4; ++k)
+            {
+                partials.push_back(static_cast<double>((draw * (2 * k + 3) + k) % 11) / 10.0);
+            }
+            return partials;
+        }
+
+    private:
+        std::vector<double> partialsToReport;
+
+        void testPhenotype() override
+        {
+            parameters.partialFitness = partialsToReport;
+            parameters.fitness = 0.25 * (partialsToReport[0] + partialsToReport[1] + partialsToReport[2] + partialsToReport[3]);
+        }
+
+        void createPhenotypeEnvironment() override {}
+    };
+
+    // Sets the groups, floor and saveObjectives a test needs, and restores the
+    // defaults afterwards even if the test fails.
+    struct ScopedSelectionSettings
+    {
+        ScopedSelectionSettings(std::vector<std::vector<size_t>> groups, const double floor, const bool saveObjectives)
+        {
+            SelectionConstants::objectiveGroups = std::move(groups);
+            SelectionConstants::feasibilityFloor = floor;
+            PopulationConstants::saveObjectives = saveObjectives;
+        }
+        ~ScopedSelectionSettings()
+        {
+            SelectionConstants::reset();
+            PopulationConstants::saveObjectives = true;
+        }
+        ScopedSelectionSettings(const ScopedSelectionSettings&) = delete;
+        ScopedSelectionSettings& operator=(const ScopedSelectionSettings&) = delete;
+        ScopedSelectionSettings(ScopedSelectionSettings&&) = delete;
+        ScopedSelectionSettings& operator=(ScopedSelectionSettings&&) = delete;
+    };
+
+    // Every non-empty line of a JSON-lines file, parsed.
+    std::vector<nlohmann::json> readJsonLines(const std::string& path)
+    {
+        std::ifstream file(path);
+        std::vector<nlohmann::json> records;
+        std::string line;
+        while (std::getline(file, line))
+        {
+            if (!line.empty())
+            {
+                records.push_back(nlohmann::json::parse(line));
+            }
+        }
+        return records;
+    }
+
+    // An objectives.jsonl individual as constrainedDominates() sees it.
+    RankedPoint rankedPointOf(const nlohmann::json& individual)
+    {
+        return { individual.at("objectives").get<std::vector<double>>(), individual.at("violation").get<double>() };
+    }
 
     std::string expectedRunDirectory(const std::string& solutionName)
     {
@@ -282,6 +375,168 @@ TEST_CASE("PopulationFileManager writes overview.jsonl as line-delimited JSON pe
 
     // per_generation_overview.txt must remain untouched by this feature.
     REQUIRE(std::filesystem::exists(runDirectory + "per_generation_overview.txt"));
+
+    std::filesystem::remove_all(runDirectory);
+}
+
+TEST_CASE("PopulationFileManager writes objectives.jsonl with one ranked record per generation", "[PopulationFileManager]")
+{
+    const ScopedSelectionSettings settings({ { 0, 1 }, { 2, 3 } }, 0.2, true);
+    constexpr size_t populationSize = 12;
+    const PopulationParameters parameters(static_cast<int>(populationSize), 2, 1.1);
+    const std::string solutionName = "FixedFitnessObjectives";
+    const auto initialSolution = std::make_shared<ObjectivesSolution>(makeTopology(1, 1), ObjectivesSolution::nextPartials(), solutionName);
+
+    Population population(parameters, initialSolution);
+    population.initialize();
+    const auto preExisting = existingRunDirs(solutionName);
+
+    REQUIRE_NOTHROW(population.evolve());
+
+    const std::string runDirectory = newlyCreatedRunDirectory(solutionName, preExisting);
+    REQUIRE(!runDirectory.empty());
+    const std::string objectivesPath = runDirectory + "objectives.jsonl";
+    REQUIRE(std::filesystem::exists(objectivesPath));
+
+    const auto records = readJsonLines(objectivesPath);
+    REQUIRE(records.size() == 2);
+
+    for (size_t generation = 0; generation < records.size(); ++generation)
+    {
+        const auto& record = records[generation];
+        INFO("generation " << generation);
+        REQUIRE(record.at("generation") == generation);
+        REQUIRE(record.at("mode") == "scalar");
+        REQUIRE(record.at("epsilon") == 0.0);
+        REQUIRE(record.at("feasibilityFloor") == 0.2);
+        REQUIRE(record.at("objectiveGroups") == nlohmann::json({ { 0, 1 }, { 2, 3 } }));
+        REQUIRE(record.at("archive").at("size").is_number_unsigned());
+        REQUIRE(record.at("archive").at("acceptedThisGeneration").is_array());
+
+        const auto& individuals = record.at("individuals");
+        REQUIRE(individuals.size() == populationSize);
+
+        bool rankZeroPresent = false;
+        for (const auto& individual : individuals)
+        {
+            REQUIRE(individual.contains("id"));
+            REQUIRE(individual.contains("species"));
+            REQUIRE(individual.contains("fitness"));
+            REQUIRE(individual.at("partialFitness").size() == 4);
+            REQUIRE(individual.at("objectives").size() == 2);
+            REQUIRE(individual.at("rank").get<int>() >= 0);
+            REQUIRE(individual.contains("crowding"));
+            REQUIRE(individual.at("violation").get<double>() >= 0.0);
+            rankZeroPresent = rankZeroPresent || individual.at("rank") == 0;
+        }
+        REQUIRE(rankZeroPresent);
+
+        for (const auto& dominator : individuals)
+        {
+            for (const auto& dominated : individuals)
+            {
+                if (constrainedDominates(rankedPointOf(dominator), rankedPointOf(dominated), 0.0))
+                {
+                    REQUIRE(dominator.at("rank").get<int>() < dominated.at("rank").get<int>());
+                }
+            }
+        }
+    }
+
+    std::filesystem::remove_all(runDirectory);
+}
+
+TEST_CASE("PopulationFileManager writes no objectives.jsonl when saveObjectives is off", "[PopulationFileManager]")
+{
+    const ScopedSelectionSettings settings({}, 0.0, false);
+    const PopulationParameters parameters(5, 2, 1.1);
+    // A name of its own, for the parallel-directory-collision reason
+    // documented on the run_metadata.json test.
+    const std::string solutionName = "FixedFitnessNoObjectives";
+    const auto initialSolution = std::make_shared<ObjectivesSolution>(makeTopology(1, 1), ObjectivesSolution::nextPartials(), solutionName);
+
+    Population population(parameters, initialSolution);
+    population.initialize();
+    const auto preExisting = existingRunDirs(solutionName);
+
+    REQUIRE_NOTHROW(population.evolve());
+
+    const std::string runDirectory = newlyCreatedRunDirectory(solutionName, preExisting);
+    REQUIRE(!runDirectory.empty());
+    REQUIRE(std::filesystem::exists(runDirectory + "overview.jsonl"));
+    REQUIRE_FALSE(std::filesystem::exists(runDirectory + "objectives.jsonl"));
+
+    std::filesystem::remove_all(runDirectory);
+}
+
+namespace
+{
+    // Blocks objectives.jsonl mid-run: the first evaluation, which happens after
+    // setFileDirectory() and before the first save, creates a *directory* of that name
+    // in the newest run folder, so the file manager cannot open the file.
+    class ObjectivesBlockingSolution final : public Solution
+    {
+    public:
+        explicit ObjectivesBlockingSolution(const SolutionTopology& topology)
+            : Solution(topology)
+        {
+            name = "FixedFitnessBlockedObjectives";
+        }
+
+        SolutionPtr clone() const override
+        {
+            return std::make_shared<ObjectivesBlockingSolution>(initialTopology);
+        }
+
+        SolutionPtr copy() const override
+        {
+            return clone();
+        }
+
+        static std::once_flag blocked;
+
+    private:
+        void testPhenotype() override
+        {
+            std::call_once(blocked, [this]()
+                {
+                    std::filesystem::path newest;
+                    for (const auto& entry : std::filesystem::directory_iterator(paths::dataRoot() / "data" / name))
+                    {
+                        if (entry.is_directory() && (newest.empty()
+                            || entry.last_write_time() > std::filesystem::last_write_time(newest)))
+                        {
+                            newest = entry.path();
+                        }
+                    }
+                    std::filesystem::create_directories(newest / "objectives.jsonl");
+                });
+            parameters.fitness = 0.5;
+        }
+
+        void createPhenotypeEnvironment() override {}
+    };
+
+    std::once_flag ObjectivesBlockingSolution::blocked;
+}
+
+TEST_CASE("PopulationFileManager keeps running when objectives.jsonl cannot be opened", "[PopulationFileManager]")
+{
+    const ScopedSelectionSettings settings({}, 0.0, true);
+    const PopulationParameters parameters(5, 2, 1.1);
+    const std::string solutionName = "FixedFitnessBlockedObjectives";
+    const auto initialSolution = std::make_shared<ObjectivesBlockingSolution>(makeTopology(1, 1));
+
+    Population population(parameters, initialSolution);
+    population.initialize();
+    const auto preExisting = existingRunDirs(solutionName);
+
+    REQUIRE_NOTHROW(population.evolve());
+
+    const std::string runDirectory = newlyCreatedRunDirectory(solutionName, preExisting);
+    REQUIRE(!runDirectory.empty());
+    REQUIRE(std::filesystem::is_directory(runDirectory + "objectives.jsonl"));
+    REQUIRE(readJsonLines(runDirectory + "overview.jsonl").size() == 2);
 
     std::filesystem::remove_all(runDirectory);
 }
