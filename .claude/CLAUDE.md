@@ -75,10 +75,12 @@ CMake variables/macros/env vars and all output formats are unchanged. The multi-
 and its implementation log are in `.claude/notes/MOO/PLAN.md` (the papers beside it are
 gitignored).
 
-**This repository is local-only: it has no git remote.** GitHub-side steps in the skills (pushing,
-`gh pr create`, CI, CodeRabbit, the Gemini doc-sync check) do not apply until a remote is added;
-work lands on local branches, one per phase, and the `pr` skill's output is a description to keep,
-not a PR to open.
+**The remote is `origin` = `github.com/Jgocunha/mo-neat-dnfs`.** Work lands on one branch per
+phase, each opened as a PR against the previous phase's branch, so the PRs form a stack
+(`feat/pareto-core` -> `feat/selection-config` -> `feat/objectives-output` -> `feat/viz-pareto` ->
+`feat/pareto-selection`, the first against `main`). To change a lower PR, commit on its branch and
+merge it upward into each branch above it - don't rebase, so no force-push is needed. PRs get
+Copilot code reviews.
 
 Everything above is general engineering guidance. Everything below is specific to this
 repository and takes precedence where the two overlap.
