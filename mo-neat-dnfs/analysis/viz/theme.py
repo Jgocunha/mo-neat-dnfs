@@ -30,6 +30,20 @@ CATEGORICAL_CYCLE = [
     "#000000",  # black
 ]
 
+# Pareto page. Scatter plots put any two colors side by side, so species identity uses only the
+# three slots that pass the all-pairs colorblind check in both light and dark mode (blue, green,
+# vermillion; Okabe-Ito orange is too light for the dark band). Everything else folds to a
+# neutral. Neutrals and the diverging midpoint are per mode, since one gray cannot recede on
+# both a white and a near-black surface.
+SPECIES_SLOTS = ["#0072B2", "#009E73", "#D55E00"]
+NEUTRAL_STRONG = {"light": "#8C8C8C", "dark": "#8B929C"}
+NEUTRAL_WEAK = {"light": "#C8C8C8", "dark": "#454B55"}
+DIVERGING_NEGATIVE = COLOR_BEST
+DIVERGING_POSITIVE = COLOR_FAILURE
+DIVERGING_MIDPOINT = {"light": "#E4E4E4", "dark": "#30353D"}
+# Values drawn on a chart (heatmap cells) wear text ink, never a series color.
+TEXT_INK = {"light": "#262730", "dark": "#FAFAFA"}
+
 SEQUENTIAL_CMAP = "viridis"
 DIVERGING_CMAP = "PuOr"  # colorblind-safe alternative to RdYlGn
 
@@ -92,10 +106,14 @@ def apply_plot_style() -> None:
 
 
 def theme_type() -> str:
-    """Return "light" or "dark". Defaults to "light" when Streamlit's theme context isn't
-    available yet (first script run, mid theme-switch, or under AppTest)."""
-    t = st.context.theme.type
-    return t if t in ("light", "dark") else "light"
+    """Return "light" or "dark". A theme.base set in the server config wins: Streamlit 1.52
+    reports st.context.theme.type as "light" even on a server started with --theme.base dark.
+    Otherwise the browser-reported theme, and "light" when that isn't available yet (first
+    script run, mid theme-switch, or under AppTest)."""
+    for candidate in (st.get_option("theme.base"), st.context.theme.type):
+        if candidate in ("light", "dark"):
+            return candidate
+    return "light"
 
 
 def register_altair_theme() -> None:

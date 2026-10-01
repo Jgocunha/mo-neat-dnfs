@@ -804,3 +804,31 @@ al.), NEAT-MODS μ+λ selection, NSGA-III, and objective names in config (the da
     (`.claude/notes/tsan-random-initial-topology-flake.md`).
 - The neat-dnfs PRs #117–#119 were then closed and their branches deleted; neat-dnfs is back to
   plain `main`.
+
+### Phase 4 (branch `feat/viz-pareto`)
+- **Python and C++ agree exactly.** `viz/pareto.py` re-ranks recorded objectives and reproduces the
+  run's own ranks, crowding distances and violations bit-for-bit. Checked on two XOR runs
+  (11 generations), one of them with groups `[[0,1,2],[3]]`, ε 0.02 and floor 0.1. The cyclic-ε
+  fallback and the zero-range crowding rule are mirrored deliberately.
+- **§3.5's "cache-schema version in the meta" already existed**: `cache._PARSER_VERSION` is part of
+  every fingerprint. It was bumped 2 → 3 (a test pins that an old-version meta is a miss).
+- **Older runs do not record fitness weights**, so a grouping typed for them uses plain means (the
+  probes did the same). A run's own recorded grouping uses its recorded, weighted objectives. The
+  page says which applies.
+- **Colour:** Okabe-Ito orange (`#E69F00`) fails the dataviz dark-mode lightness band, so species
+  colouring uses only blue, green and vermillion (they pass all-pairs CVD in both modes), and the
+  rest fold into a neutral. The heatmap uses blue ↔ vermillion with Lab interpolation (the default
+  path went through purple).
+- **Streamlit 1.52 bug:** `st.context.theme.type` reports "light" on a server started with
+  `--theme.base dark`, so `theme.theme_type()` now prefers the configured `theme.base`.
+- **The installed Python packages are older than `requirements.txt` asks** (Streamlit 1.52,
+  pandas 2.3, numpy 1.24); the code uses only APIs available in both.
+- The across-runs sections (Experiment: hypervolume per run and the union of final fronts; Compare:
+  final hypervolume with Mann–Whitney U) are **opt-in toggles**, because the first use scans every
+  run's `statistics/`. Compare skips experiments whose partial count differs from the first one
+  (another task, so a non-comparable hypervolume).
+- Verified with pytest (158), headless `AppTest` runs of every page and section (old AND run raw
+  and grouped, new XOR runs, invalid grouping, Experiment, Compare, switching objective space), and
+  Playwright screenshots in light and dark mode against `sandbox/proto_pareto_views.png`. Grouped
+  AND gen 25 shows front 0 = 46/300 (15.3 %) and specialists 28.3 %; raw shows 199/300 and 70.4 %.
+  Both match §1.2–1.3.

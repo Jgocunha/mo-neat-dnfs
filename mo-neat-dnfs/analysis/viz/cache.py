@@ -5,7 +5,9 @@ import pandas as pd
 _CACHE_DIRNAME = ".viz_cache"
 
 
-_PARSER_VERSION = 2
+# Part of every fingerprint, so bumping it turns every existing on-disk cache into a miss.
+# 3: the statistics scan also caches a per-individual objectives table (Pareto page).
+_PARSER_VERSION = 3
 
 
 def _run_cache_dir(dir_path: Path) -> Path:

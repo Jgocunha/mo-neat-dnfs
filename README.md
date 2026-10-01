@@ -249,9 +249,9 @@ All data are stored in the `data/` directory.
 
 ### Analysis Tools (`analysis/`)
 
-A Streamlit dashboard with seven pages, split into three scopes:
+A Streamlit dashboard with eight pages, split into three scopes:
 
-* **Single run** -- Fitness, Species, Topology, Mutations
+* **Single run** -- Fitness, Species, Topology, Mutations, Pareto (fronts, trade-offs and their evolution; works on every run, including those recorded before `objectives.jsonl` existed)
 * **Across runs** -- Experiment (aggregates every run in one experiment), Compare (several experiments side by side)
 * **Run context** -- Provenance (build, dependency, and machine facts recorded for the selected run)
 

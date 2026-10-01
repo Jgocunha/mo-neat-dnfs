@@ -38,6 +38,15 @@ def test_theme_type_defaults_to_light_outside_streamlit_context():
     assert theme_type() == "light"
 
 
+def test_theme_type_follows_the_configured_base_theme(monkeypatch):
+    # Streamlit 1.52 reports st.context.theme.type as "light" even on a server started with
+    # --theme.base dark, so the configured base must win for charts to draw dark-mode colors.
+    import streamlit as st
+
+    monkeypatch.setattr(st, "get_option", lambda name: "dark" if name == "theme.base" else None)
+    assert theme_type() == "dark"
+
+
 def test_color_tokens_are_valid_matplotlib_colors():
     tokens = [COLOR_BEST, COLOR_AVG, COLOR_TARGET, COLOR_SUCCESS, COLOR_FAILURE, COLOR_STRUCTURAL_CHANGE]
     for c in tokens:

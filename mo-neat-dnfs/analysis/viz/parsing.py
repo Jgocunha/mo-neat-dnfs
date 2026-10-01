@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import datetime
 import math
 import os
@@ -10,7 +11,7 @@ import streamlit as st
 
 from .cache import _disk_cache_read_df, _disk_cache_read_json, _disk_cache_write_df, _disk_cache_write_json, _fingerprint_dir, _run_cache_dir
 from .genome import collect_parameter_values, kernel_kinds_for_solution
-from .solution_record import _AGE_PARENTS_RE, _extract_mutation_events, _GENOME_SIZE_RE, categorize_mutation, find_solution_blob, parse_solution_blob  # noqa: F401  (_extract_mutation_events, categorize_mutation re-exported)
+from .solution_record import _AGE_PARENTS_RE, _extract_mutation_events, _GENOME_SIZE_RE, _SPEC_RE, categorize_mutation, find_solution_blob, parse_solution_blob  # noqa: F401  (_extract_mutation_events, categorize_mutation re-exported)
 
 def parse_overview_line(line: str):
     pattern = (
@@ -355,23 +356,26 @@ _SOL_ID_RE = re.compile(r"solution\s+(\d+)\s+\[")
 
 def _scan_run_statistics_uncached(run_dir_str: str, generations: tuple):
     """Single pass over statistics/generation_X.txt that extracts partial-fitness vectors,
-    mutation events, AND per-individual distribution fields (fitness, age, genome size) --
-    everything the various population-level views need, in one read.
+    mutation events, per-individual distribution fields (fitness, age, genome size), AND each
+    individual's id, species and raw partials (the Pareto page's fallback for runs without
+    objectives.jsonl) -- everything the various population-level views need, in one read.
 
     compute_partial_fitness and compute_mutation_events used to each independently
     re-read and re-regex the same (often 100+ MB) statistics/ text; every solution
     line carries the 'part.: (...)', 'last mutations{...}', and 'age:'/'genome (...)' data
     together, so one pass is enough. Returns (partial_df, mut_df, dist_df) matching what
-    those functions build directly. See _scan_run_statistics for the cached entry point.
+    those functions build directly, plus obj_df (generation, id, species, fitness, p1..pN).
+    See _scan_run_statistics for the cached entry point.
     """
     run_dir = Path(run_dir_str)
     stats_dir = run_dir / "statistics"
     if not stats_dir.exists():
-        return None, pd.DataFrame(), pd.DataFrame()
+        return None, pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
     partial_records = []
     mut_records = []
     dist_records = []
+    obj_records = []
 
     for g in generations:
         stats_path = stats_dir / f"generation_{g + 1}.txt"
@@ -398,6 +402,13 @@ def _scan_run_statistics_uncached(run_dir_str: str, generations: tuple):
                             parts.append(float(token))
                         except ValueError:
                             pass
+
+                sol_m = _SOL_ID_RE.search(line)
+                spec_m = _SPEC_RE.search(line)
+                if parts and sol_m and spec_m:
+                    obj_record = {"generation": g, "id": int(sol_m.group(1)), "species": int(spec_m.group(1)), "fitness": fit}
+                    obj_record.update({f"p{i}": v for i, v in enumerate(parts, start=1)})
+                    obj_records.append(obj_record)
 
                 if parts:
                     if sum_parts is None:
@@ -437,7 +448,6 @@ def _scan_run_statistics_uncached(run_dir_str: str, generations: tuple):
                 if not muts_block:
                     continue
 
-                sol_m = _SOL_ID_RE.search(line)
                 if not sol_m:
                     continue
                 sol_id = int(sol_m.group(1))
@@ -475,7 +485,9 @@ def _scan_run_statistics_uncached(run_dir_str: str, generations: tuple):
     else:
         dist_df = pd.DataFrame()
 
-    return partial_df, mut_df, dist_df
+    obj_df = pd.DataFrame(obj_records) if obj_records else pd.DataFrame()
+
+    return partial_df, mut_df, dist_df, obj_df
 
 
 _STATS_GEN_FILE_RE = re.compile(r"^generation_(\d+)\.txt$")
@@ -493,7 +505,7 @@ def _all_statistics_generations(stats_dir: Path) -> tuple:
     return tuple(sorted(gens))
 
 
-def _filter_scan_result(partial_df, mut_df, dist_df, generations: tuple):
+def _filter_scan_result(partial_df, mut_df, dist_df, obj_df, generations: tuple):
     gen_set = set(generations)
     if partial_df is not None and not partial_df.empty:
         partial_df = partial_df[partial_df["generation"].isin(gen_set)].reset_index(drop=True)
@@ -501,7 +513,9 @@ def _filter_scan_result(partial_df, mut_df, dist_df, generations: tuple):
         mut_df = mut_df[mut_df["generation"].isin(gen_set)].reset_index(drop=True)
     if not dist_df.empty:
         dist_df = dist_df[dist_df["generation"].isin(gen_set)].reset_index(drop=True)
-    return partial_df, mut_df, dist_df
+    if not obj_df.empty:
+        obj_df = obj_df[obj_df["generation"].isin(gen_set)].reset_index(drop=True)
+    return partial_df, mut_df, dist_df, obj_df
 
 
 def _scan_run_statistics_disk_cached(run_dir_str: str, generations: tuple):
@@ -529,20 +543,22 @@ def _scan_run_statistics_disk_cached(run_dir_str: str, generations: tuple):
             else None
         )
         dist_df = _disk_cache_read_df(cache_dir / "statistics_scan.dist.parquet")
-        if mut_df is not None and dist_df is not None:
-            return _filter_scan_result(partial_df, mut_df, dist_df, generations)
+        obj_df = _disk_cache_read_df(cache_dir / "statistics_scan.obj.parquet")
+        if mut_df is not None and dist_df is not None and obj_df is not None:
+            return _filter_scan_result(partial_df, mut_df, dist_df, obj_df, generations)
         # cache partially unreadable -> fall through to recompute
 
     all_generations = _all_statistics_generations(stats_dir)
-    partial_df, mut_df, dist_df = _scan_run_statistics_uncached(run_dir_str, all_generations)
+    partial_df, mut_df, dist_df, obj_df = _scan_run_statistics_uncached(run_dir_str, all_generations)
 
     _disk_cache_write_df(mut_df, cache_dir / "statistics_scan.mut.parquet")
     _disk_cache_write_df(dist_df, cache_dir / "statistics_scan.dist.parquet")
+    _disk_cache_write_df(obj_df, cache_dir / "statistics_scan.obj.parquet")
     if partial_df is not None:
         _disk_cache_write_df(partial_df, cache_dir / "statistics_scan.partial.parquet")
     _disk_cache_write_json(meta_path, {"fingerprint": fp, "has_partial": partial_df is not None})
 
-    return _filter_scan_result(partial_df, mut_df, dist_df, generations)
+    return _filter_scan_result(partial_df, mut_df, dist_df, obj_df, generations)
 
 
 @st.cache_data
@@ -563,7 +579,7 @@ def compute_partial_fitness(run_dir_str: str, generations: tuple):
     Returns a DataFrame with columns:
       generation, best_p1..N, avg_p1..N
     """
-    partial_df, _, _ = _scan_run_statistics(run_dir_str, generations)
+    partial_df, _, _, _ = _scan_run_statistics(run_dir_str, generations)
     return partial_df
 
 
@@ -577,8 +593,103 @@ def compute_population_distributions(run_dir_str: str, generations: tuple) -> pd
     Returns a DataFrame with columns: generation, fitness, age, genome_size (one row per
     individual).
     """
-    _, _, dist_df = _scan_run_statistics(run_dir_str, generations)
+    _, _, dist_df, _ = _scan_run_statistics(run_dir_str, generations)
     return dist_df
+
+
+@st.cache_data
+def compute_population_objectives(run_dir_str: str, generations: tuple) -> pd.DataFrame:
+    """Every individual's id, species, fitness and raw partials, per generation -- what the
+    Pareto page ranks for a run that has no objectives.jsonl (every run before it existed).
+    Reuses the same single statistics/ pass as compute_partial_fitness.
+
+    Returns a DataFrame with columns: generation, id, species, fitness, p1..pN (one row per
+    individual); empty when the run has no statistics/.
+    """
+    _, _, _, obj_df = _scan_run_statistics(run_dir_str, generations)
+    return obj_df
+
+
+def find_solution_blob_in_generation(run_dir_str: str, generation0: int, sol_id: int) -> str | None:
+    """The raw 'solution <id> [ ... ]' record of one individual from statistics/, for the genome
+    inspector; None when that generation's file or that solution is missing."""
+    stats_path = Path(run_dir_str) / "statistics" / f"generation_{generation0 + 1}.txt"
+    if not stats_path.exists():
+        return None
+    target_prefix = f"solution {sol_id} ["
+    with stats_path.open("r") as f:
+        for line in f:
+            if line.startswith(target_prefix):
+                return find_solution_blob(line)
+    return None
+
+
+@dataclass
+class RecordedObjectives:
+    """objectives.jsonl, flattened: the run's selection settings, one row per individual per
+    generation, and the Pareto archive's size and acceptances per generation."""
+
+    settings: dict
+    individuals: pd.DataFrame
+    archive: pd.DataFrame
+
+
+def _flatten_objectives_individual(generation: int, individual: dict) -> dict:
+    row = {
+        "generation": generation,
+        "id": individual["id"],
+        "species": individual["species"],
+        "fitness": individual["fitness"],
+    }
+    row.update({f"p{i}": v for i, v in enumerate(individual["partialFitness"], start=1)})
+    row.update({f"o{k}": v for k, v in enumerate(individual["objectives"], start=1)})
+    crowding = individual["crowding"]
+    row.update({
+        "rank": individual["rank"],
+        "crowding": math.inf if crowding is None else crowding,
+        "violation": individual["violation"],
+    })
+    return row
+
+
+@st.cache_data
+def load_objectives(run_dir_str: str) -> RecordedObjectives | None:
+    """Parse objectives.jsonl, which runs write in both selection modes once the multi-objective
+    groundwork exists. Returns None when the file is absent -- every older run -- so the caller
+    falls back to compute_population_objectives. A null crowding distance is a boundary point
+    (JSON has no infinity) and is read back as +inf. Settings come from the first line; they are
+    run-wide."""
+    path = Path(run_dir_str) / "objectives.jsonl"
+    if not path.exists():
+        return None
+
+    settings = None
+    rows = []
+    archive_rows = []
+    with path.open("r", encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            record = json.loads(line)
+            if settings is None:
+                settings = {
+                    "mode": record["mode"],
+                    "epsilon": record["epsilon"],
+                    "feasibility_floor": record["feasibilityFloor"],
+                    "objective_groups": record["objectiveGroups"],
+                }
+            generation = record["generation"]
+            rows.extend(_flatten_objectives_individual(generation, individual) for individual in record["individuals"])
+            archive = record["archive"]
+            archive_rows.append({
+                "generation": generation,
+                "size": archive["size"],
+                "accepted": len(archive["acceptedThisGeneration"]),
+            })
+
+    if settings is None:
+        return None
+    return RecordedObjectives(settings, pd.DataFrame(rows), pd.DataFrame(archive_rows))
 
 
 def generations_meeting_targets(
@@ -1104,7 +1215,7 @@ def compute_mutation_events(run_dir_str: str, generations: tuple):
       mutation_raw   (gene + inner, e.g. 'fg 2: fg gk width -1.0'),
       category       (fine-grained category from categorize_mutation).
     """
-    _, mut_df, _ = _scan_run_statistics(run_dir_str, generations)
+    _, mut_df, _, _ = _scan_run_statistics(run_dir_str, generations)
     return mut_df
 
 
@@ -1189,3 +1300,14 @@ def compute_per_generation_best_mutation(mut_events: pd.DataFrame):
 
     df_pg = pd.DataFrame(rows).sort_values("generation").reset_index(drop=True)
     return df_pg
+
+
+def load_pareto_population(run_dir_str: str) -> tuple[pd.DataFrame, RecordedObjectives | None]:
+    """The Pareto page's population table: objectives.jsonl when the run wrote it (with its
+    recorded objectives, ranks and settings), otherwise every individual's raw partials from
+    statistics/ -- so every run ever recorded opens. The frame is empty when neither exists."""
+    recorded = load_objectives(run_dir_str)
+    if recorded is not None:
+        return recorded.individuals, recorded
+    stats_dir = Path(run_dir_str) / "statistics"
+    return compute_population_objectives(run_dir_str, _all_statistics_generations(stats_dir)), None
