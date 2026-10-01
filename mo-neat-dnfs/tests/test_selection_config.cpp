@@ -181,6 +181,19 @@ TEST_CASE("ConfigLoader rejects a mistyped key inside SelectionConstants", "[Sel
         Catch::Matchers::ContainsSubstring("dominanceEpsilion"));
 }
 
+TEST_CASE("ConfigLoader rejects a SelectionConstants value that is not an object", "[SelectionConfig]")
+{
+    const RestoreReferenceConfig restore;
+
+    const std::vector<json> invalidBlocks{ json(nullptr), json::array(), json("pareto"), json(1) };
+    for (const auto& block : invalidBlocks)
+    {
+        INFO(block.dump());
+        REQUIRE_THROWS_WITH(loadWithSelectionBlock(block, "not-an-object.json"),
+            Catch::Matchers::ContainsSubstring("SelectionConstants must be an object"));
+    }
+}
+
 TEST_CASE("ConfigLoader rejects out-of-range selection values", "[SelectionConfig]")
 {
     const RestoreReferenceConfig restore;
