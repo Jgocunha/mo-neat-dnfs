@@ -91,7 +91,10 @@ namespace neat_dnfs
 	/// - @c testPhenotype() — run the simulation and compute @c parameters.fitness
 	///
 	/// The fitness value set in @c testPhenotype() drives species assignment,
-	/// adjusted-fitness calculation, and offspring allocation.
+	/// adjusted-fitness calculation, and offspring allocation in scalar mode (the
+	/// default). In Pareto mode, selection reads the objective vector derived from
+	/// @c parameters.partialFitness instead (see isPreferredTo()), and the fitness
+	/// still picks the reported best solution and ends the run.
 	class Solution : public std::enable_shared_from_this<Solution>
 	{
 	protected:
