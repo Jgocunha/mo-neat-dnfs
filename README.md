@@ -2,250 +2,89 @@
 
 ## Multi-Objective NeuroEvolution of Augmenting Dynamic Neural Field Topologies
 
-<img src="mo-neat-dnfs/resources/images/logo.png" alt="logo" width="800" height="800">
-
----
-
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C?style=flat-square&logo=cplusplus&logoColor=white)](https://en.cppreference.com/w/cpp/20)
 [![CMake](https://img.shields.io/badge/CMake-3.31%2B-064F8C?style=flat-square&logo=cmake&logoColor=white)](https://cmake.org)
 
 **mo-neat-dnfs** is the multi-objective branch of [neat-dnfs](https://github.com/Jgocunha/neat-dnfs),
-split off from neat-dnfs v0.3.0. It keeps everything neat-dnfs does and adds **Pareto (multi-objective)
-selection**: instead of ranking solutions by a weighted sum of their partial fitnesses, it can rank them
-by dominance over an objective vector (NSGA-II non-dominated sorting and crowding distance, inside NEAT's
-species loop). Scalar selection remains the default and behaves exactly as in neat-dnfs. The two
-projects are developed separately from here on.
+split off at neat-dnfs v0.3.0. The two projects are developed separately from here on.
 
-**mo-neat-dnfs** is a C++ framework that extends **NeuroEvolution of Augmenting Topologies (NEAT)** to the automated synthesis of **Dynamic Neural Field (DNF)** architectures.
-It enables the joint evolution of **continuous-time neural dynamics**, **kernel-based interactions**, and **architectural topology**, supporting the discovery of compact and interpretable Dynamic Field Theory (DFT) models without manual tuning.
+It adds **Pareto (multi-objective) selection**. Instead of ranking solutions by the weighted sum of their
+partial fitnesses, it can rank them by dominance over an objective vector, using NSGA-II non-dominated
+sorting and crowding distance inside NEAT's species loop. Scalar selection remains the default and behaves
+exactly as in neat-dnfs.
 
----
-
-## Overview
-
-Dynamic Neural Fields (DNFs) provide a biologically grounded and mathematically principled framework for modelling neural population dynamics underlying perception, working memory, selection, and decision-making. Despite their expressive power, DNF architectures are traditionally **hand-designed and manually parameterised**, a process that is time-consuming, difficult to generalise, and highly dependent on expert knowledge.
-
-**mo-neat-dnfs** addresses this limitation by integrating DNFs with **neuroevolution**.
-By extending NEAT to operate directly on neural fields and spatial interaction kernels—rather than discrete neurons and scalar weights—the framework enables the **autonomous discovery of DNF architectures** that exhibit desired dynamical behaviours.
-
-The system evolves both:
-
-* **Intrinsic field dynamics** (e.g., time constants, resting levels, kernel profiles)
-* **Inter-field structure** (number of fields and their spatial couplings)
-
-Evolution proceeds from minimal architectures and introduces complexity **only when required by task constraints**, in line with the minimal cognitive construction principle.
+**What neat-dnfs is.** The framework itself (evolving Dynamic Neural Field architectures with NEAT, the
+genome and species model, the benchmark tasks and the ablation studies) is described in the
+[neat-dnfs README](https://github.com/Jgocunha/neat-dnfs#readme), its
+[wiki](https://github.com/Jgocunha/neat-dnfs/wiki) and its [API docs](https://jgocunha.github.io/neat-dnfs/).
+This README covers only what differs here.
 
 ---
 
-## Key Features
+## Multi-objective selection
 
-* **Evolution of Dynamic Neural Field Architectures**
-  Simultaneous evolution of neural field parameters and architectural topology.
+Work in progress. The design, the evidence behind it and the phase-by-phase implementation log are in
+[`.claude/notes/MOO/PLAN.md`](.claude/notes/MOO/PLAN.md). In short:
 
-* **Continuous-Time, Kernel-Based Neuroevolution**
-  Genomes encode spatial interaction kernels and field dynamics instead of discrete synaptic weights.
-
-* **Incremental Structural Complexification**
-  New fields and interactions emerge gradually through NEAT-style structural mutations.
-
-* **Interpretability by Design**
-  Evolved solutions consist of explicit neural fields with identifiable functional roles.
-
-* **Task-General Framework**
-  Applicable to a hierarchy of DFT-inspired tasks, from basic instabilities to compositional cognitive paradigms.
-
-* **Comprehensive Evolutionary Analysis**
-  Built-in logging, statistics, and visualisation of species, genomes, and architectural growth.
+* **Objectives are grouped partial fitnesses.** Each task partitions its partial-fitness terms into
+  2–3 complete behavioural requirements, so that no trivial controller (always on, always off) can
+  maximise an objective.
+* **Selection keeps NEAT.** Speciation, fitness sharing, offspring allocation, champion elitism,
+  crossover and mutation stay. Every place that compared two scalar fitnesses compares Pareto rank and
+  crowding distance instead.
+* **An optional feasibility floor** (Deb 2002's constrained domination) puts solutions with any partial
+  below the floor behind every feasible one.
+* **The weighted sum is still computed.** It picks the reported best solution and decides when a run
+  ends, so scalar and Pareto runs stay comparable.
+* **Off by default.** A run is in Pareto mode only when its config says so.
 
 ---
 
-## Architecture
+## Differences from neat-dnfs
 
-### Core Components
+| | neat-dnfs | mo-neat-dnfs |
+|---|---|---|
+| Nested project folder | `neat-dnfs/` | `mo-neat-dnfs/` |
+| Executables | `neat-dnfs-evol`, `-inc-evol`, `-sol-eval` | `mo-neat-dnfs-evol`, `-inc-evol`, `-sol-eval` |
+| Reference config | `config/neat_dnfs.json` | `config/mo_neat_dnfs.json` |
+| Installed data directory | `share/neat-dnfs/` | `share/mo-neat-dnfs/` |
 
-| Component             | Description                                                                              |
-| --------------------- | ---------------------------------------------------------------------------------------- |
-| **Genome**            | Encodes a DNF-based architecture as field genes and interaction genes.                   |
-| **Population**        | Manages evolution, evaluation, selection, and reproduction.                              |
-| **Species**           | Groups similar architectures to protect structural innovation.                           |
-| **Solution**          | Defines task-specific fitness evaluation based on field dynamics.                        |
-| **Field Genes**       | Represent individual neural fields (input, hidden, output) and their intrinsic dynamics. |
-| **Interaction Genes** | Represent spatially structured kernel-based couplings between fields.                    |
-
-<img src="mo-neat-dnfs/resources/images/phenotype-genotype-mapping-wb.png">
-
-**Genotype-to-phenotype mapping in mo-neat-dnfs.**
-*Field genes encode intrinsic neural field dynamics, while interaction genes specify kernel-defined couplings. Together, they map directly to a continuous-time DNF architecture.*
-
----
-
-## Evolutionary Process
-
-1. **Initialization** – Start from ultra-minimal architectures (input and output fields only).
-2. **Simulation** – Evaluate continuous-time DNF dynamics under task-specific stimuli.
-3. **Fitness Evaluation** – Assess qualitative dynamical properties (e.g., peak formation, stability, selection).
-4. **Speciation** – Protect novel architectural innovations using compatibility distance.
-5. **Selection & Reproduction** – Apply NEAT-style crossover and fitness sharing.
-6. **Mutation** – Refine parameters or introduce new fields and interactions.
-
----
-
-## Implemented Tasks
-
-The framework includes a hierarchy of benchmark tasks designed to probe increasingly complex DFT mechanisms:
-
-### Core Dynamic Mechanisms
-
-* **Detection Instability** – Transient input-driven activation and decay
-* **Memory Instability** – Self-sustained activation without input
-* **Selection Instability** – Winner-take-all competition
-
-### Compositional Tasks Requiring Structural Innovation
-
-* **Delayed Match-to-Sample (DMTS)** – Internal memory biasing later selection
-* **Inhibition of Return (IOR)** – Delayed inhibitory bias against previously selected locations
-
-Additional simple logical tasks (e.g., AND, XOR) are included for validation and demonstration.
-
----
-
-## Download a pre-built release
-
-`scripts/package.bat` / `scripts/package.sh` build ready-to-run archives for Windows, Linux and
-macOS. mo-neat-dnfs has no published releases yet; neat-dnfs's own releases are on its
-[Releases page](https://github.com/Jgocunha/neat-dnfs/releases).
-
-```bash
-tar -xzf mo-neat-dnfs-<version>-linux-x64.tar.gz    # or unzip the Windows archive
-cd mo-neat-dnfs-<version>-linux-x64
-./bin/mo-neat-dnfs-evol --help
-./bin/mo-neat-dnfs-evol --task xor --runs 1
-```
-
-Each archive holds the three experiment executables in `bin/` and the hyperparameter
-files they read in `share/mo-neat-dnfs/` (`config/`, `templates/`). The binaries find those
-files relative to their own location, so the extracted folder can live anywhere; results
-are written to a `data/` folder in whatever directory you run from. Two environment
-variables override this: `NEAT_DNFS_ROOT` points at a different `config/`+`templates/`
-tree, and `NEAT_DNFS_DATA_DIR` at a different results location.
-
-The archives do not bundle system libraries. On Linux, install the OpenGL/X11 runtime
-first:
-
-```bash
-sudo apt-get install -y libgl1 libglu1-mesa libglfw3 libxrandr2 libxinerama1 libxcursor1 libxi6
-```
-
-To build an archive yourself from a Release build tree, run `scripts/package.sh`
-(`scripts\package.bat` on Windows).
+**Unchanged:** the C++ namespace `neat_dnfs`, include paths, the `NEAT_DNFS_*` CMake options, macros and
+environment variables, and every output format. Runs recorded by neat-dnfs open in this project's
+dashboard, and the neat-dnfs documentation applies here with the names above.
 
 ---
 
 ## Building
 
-### Prerequisites
-
-* **CMake 3.31.6+**
-* **C++20** compiler
-* **VCPKG** package manager
-
-**Dependencies (via VCPKG):**
-
-* `imgui`, `implot`, `imgui-node-editor`, `nlohmann-json`
-
-**Additional dependencies:**
-
-* [`imgui-platform-kit`](https://github.com/Jgocunha/imgui-platform-kit)
-* [`dynamic-neural-field-composer`](https://github.com/Jgocunha/dynamic-neural-field-composer)
-
-### Build Instructions
+Needs CMake 3.31.6+, a C++20 compiler and [vcpkg](https://vcpkg.io) (`VCPKG_ROOT` must be set), plus
+[`imgui-platform-kit`](https://github.com/Jgocunha/imgui-platform-kit) and
+[`dynamic-neural-field-composer`](https://github.com/Jgocunha/dynamic-neural-field-composer).
+`mo-neat-dnfs/scripts/` has setup, build and package scripts for Windows, Linux and macOS.
 
 ```bash
 export VCPKG_ROOT=/path/to/vcpkg
+cd mo-neat-dnfs
 mkdir build && cd build
 cmake ..
 cmake --build . --config Release
 ```
 
+`scripts/package.sh` (`scripts\package.bat` on Windows) builds a ready-to-run archive. mo-neat-dnfs has
+no published releases yet.
+
 ---
 
 ## Usage
 
-> **New here?** [First Steps](https://github.com/Jgocunha/neat-dnfs/wiki/First-Steps) (neat-dnfs wiki; it applies here, with `mo-` prefixed binary names) is the practical guide: running experiments and
-> ablations, and which config files to edit to change hyperparameters.
-
-### Basic Example
-
-```cpp
-#include "neat/population.h"
-#include "solutions/xor.h"
-
-XOR solution{ SolutionTopology{{ 
-    { {FieldGeneType::INPUT, {50, 1.0}}, 
-      {FieldGeneType::INPUT, {50, 1.0}}, 
-      {FieldGeneType::OUTPUT, {50, 1.0}} } 
-}}};
-
-PopulationParameters parameters{100, 150, 0.95};
-Population population{parameters, std::make_unique<XOR>(solution)};
-population.initialize();
-population.evolve();
-```
-
-### Custom Tasks
-
-To define a new task:
-
-1. Inherit from the `Solution` base class
-2. Specify the initial minimal topology
-3. Implement `evaluate()` using field-dynamics-based fitness criteria
-
-```cpp
-void evaluate() override 
-{
-    // Define fitness in terms of DNF dynamics:
-    // peak existence, position, amplitude, width, or decay to baseline
-    parameters.fitness = computedFitness;
-}
-```
-
-### Ablation Studies
-
-`mo-neat-dnfs-evol` and `mo-neat-dnfs-inc-evol` accept `--task NAME` and `--ablation NAME` at runtime, so
-sweeping a task across every mechanism condition is a shell loop, not a rebuild (`--list` prints the
-available tasks and ablations):
-
 ```bash
+mo-neat-dnfs-evol --list
+mo-neat-dnfs-evol --task xor --runs 1
 mo-neat-dnfs-evol --task and --ablation no-crossover --runs 30 --pop 500 --gens 200 --target 0.9
 ```
 
-Five conditions are available, each a config-only override applied before `Population::initialize()`
-(see `include/neat_tools/ablation_presets.h`):
-
-| Ablation | What it disables |
-|---|---|
-| `no-growth-io-only` | Structural mutations; genome starts fully connected input/output only |
-| `no-growth-reference-hidden-field-count` | Same, plus the task's reference number of seeded hidden fields |
-| `no-speciation` | Compatibility-distance species assignment; population starts non-minimal |
-| `no-crossover` | Two-parent reproduction; offspring are single-parent clones |
-| `random-initial-topology` | Minimal-start bias; genome seeds 1-5 random hidden fields and connections |
-
-Each ablated run writes to its own `data/<Task> <Ablation>/` folder, alongside the unablated
-`data/<Task>/` control, so the analysis dashboard (see below) lists every arm as a separate
-experiment with no extra setup.
-
----
-
-## Statistics and Analysis
-
-The framework automatically records:
-
-* **Fitness evolution**
-* **Species diversity and lineage**
-* **Architectural complexity (fields and interactions)**
-* **Mutation and structural growth statistics**
-
-All data are stored in the `data/` directory.
+[`mo-neat-dnfs/apps/README.md`](mo-neat-dnfs/apps/README.md) documents every flag, task, ablation preset
+and the config layering. Results are written to `data/` in the directory you run from.
 
 ### Analysis Tools (`analysis/`)
 
@@ -263,61 +102,8 @@ run is opened.
 
 ---
 
-## Project Structure
-
-```bash
-mo-neat-dnfs/
-├── include/
-│   ├── neat/          # Core NEAT-DNF implementation
-│   ├── solutions/     # Task definitions
-│   ├── neat_tools/    # Logging, config loading, and other utilities
-│   └── constants.h    # Hyperparameter definition
-├── src/
-├── apps/              # Experiment executables
-├── tests/
-├── config/            # Runtime hyperparameter JSON
-├── templates/         # Starting-solution JSONs
-├── data/              # Evolution outputs
-├── analysis/          # Post-hoc analysis tools
-└── CMakeLists.txt
-```
-
----
-
-## Video explanation
-
-[![Watch the video](https://img.youtube.com/vi/tgNbhQQRmbM/maxresdefault.jpg)](https://youtu.be/tgNbhQQRmbM)
-
----
-
-## Documentation
-
-For a full exploration of the repository, refer to the [neat-dnfs Wiki](https://github.com/Jgocunha/neat-dnfs/wiki). The multi-objective design is in `.claude/notes/MOO/PLAN.md`.
-
----
-
-## Main inspiration for this work
-
-* Amari, Shun-ichi (1977) - "Dynamics of pattern formation in lateral-inhibition type neural fields"
-* Schöner, Gregor and Spencer, John and Research Group, Dft (2015) - "Dynamic Thinking: A Primer on Dynamic Field Theory"
-* Nolfi, Stefano and Floreano, Dario (2000) - "Evolutionary robotics: the biology, intelligence, and technology of self-organizing machines"
-* Floreano, Dario (2023) - "Bio-Inspired Artificial Intelligence: Theories, Methods, and Technologies"
-* Erlhagen, Wolfram and Bicho, Estela (2006) - "The dynamic neural field approach to cognitive robotics"
-* Krichmar, Jeffrey L. (2018) - "Neurorobotics — A Thriving Community and a Promising Pathway Toward Intelligent Cognitive Robots"
-* Stanley, Kenneth O. and Miikkulainen, Risto (2002) - "Evolving Neural Networks through Augmenting Topologies"
-* Erlhagen, Wolfram and Bicho, Estela (2014) - "A Dynamic Neural Field Approach to Natural and Efficient Human-Robot Collaboration"
-* Pfeifer, Rolf and Bongard, Josh (2006) - "How the Body Shapes the Way We Think: A New View of Intelligence"
-* Coombes, Stephen and Beim Graben, Peter and Potthast, Roland and Wright, James (2014) - "Neural fields: theory and applications"
-
----
-
 ## Citation
 
-If you use this work in your research, please cite:
+mo-neat-dnfs builds on neat-dnfs. If you use it in your research, please cite:
 
 > J. G. Cunha, W. Erlhagen, R. H. Cuijpers, E. Bicho, "NEAT-DNFs: A NeuroEvolutionary Framework for Evolving Dynamic Neural Field Architectures," in *Proceedings of the Genetic and Evolutionary Computation Conference (GECCO '26)*, Association for Computing Machinery, New York, NY, USA, 2026, pp. 966–974. https://doi.org/10.1145/3795095.3805169
-
-
-
-
-
