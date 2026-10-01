@@ -407,6 +407,7 @@ add_executable(${TEST_PROJECT}
     "tests/solutions/evol_inhibition_of_return.cpp"
     "tests/solutions/evol_and.cpp"
     "tests/solutions/evol_xor.cpp"
+    "tests/solutions/evol_pareto.cpp"
 )
 target_include_directories(${TEST_PROJECT} PRIVATE include tests)
 target_link_libraries(${TEST_PROJECT} PRIVATE Catch2::Catch2WithMain imgui-platform-kit  dynamic-neural-field-composer ${CMAKE_PROJECT_NAME})
