@@ -93,6 +93,10 @@ namespace neat_dnfs
 		{
 			saveChampions();
 		}
+		if (SelectionConstants::mode == SelectionMode::Pareto)
+		{
+			saveParetoArchive();
+		}
 	}
 
 	void PopulationFileManager::setFileDirectory()
@@ -129,27 +133,34 @@ namespace neat_dnfs
 		{
 			if (solution->getFitness() > fitness)
 			{
-				solution->buildPhenotype();
-				solution->createPhenotypeEnvironment();
-				auto simulation = solution->getPhenotype();
-				solution->clearPhenotype();
-				// save weights
-				for (const auto& element : simulation.getElements())
-				{
-					if (element->getLabel() == element::ElementLabel::FIELD_COUPLING)
-					{
-						const auto fieldCoupling = std::dynamic_pointer_cast<element::FieldCoupling>(element);
-						fieldCoupling->writeWeights();
-					}
-				}
-				// save elements
-				const std::string uniqueIdentifier = solutionIdentifier(solution->getId(),
-					population->parameters.currentGeneration, solution->getSpeciesId(), solution->getFitness());
-				simulation.setUniqueIdentifier(uniqueIdentifier);
-				SimulationFileManager sfm(std::make_shared<Simulation>(simulation), directoryPath);
-				sfm.saveElementsToJson();
+				saveSolutionPhenotype(solution, directoryPath);
 			}
 		}
+	}
+
+	void PopulationFileManager::saveSolutionPhenotype(const SolutionPtr& solution, const std::string& directoryPath) const
+	{
+		using namespace dnf_composer;
+
+		solution->buildPhenotype();
+		solution->createPhenotypeEnvironment();
+		auto simulation = solution->getPhenotype();
+		solution->clearPhenotype();
+		// save weights
+		for (const auto& element : simulation.getElements())
+		{
+			if (element->getLabel() == element::ElementLabel::FIELD_COUPLING)
+			{
+				const auto fieldCoupling = std::dynamic_pointer_cast<element::FieldCoupling>(element);
+				fieldCoupling->writeWeights();
+			}
+		}
+		// save elements
+		const std::string uniqueIdentifier = solutionIdentifier(solution->getId(),
+			population->parameters.currentGeneration, solution->getSpeciesId(), solution->getFitness());
+		simulation.setUniqueIdentifier(uniqueIdentifier);
+		SimulationFileManager sfm(std::make_shared<Simulation>(simulation), directoryPath);
+		sfm.saveElementsToJson();
 	}
 
 	void PopulationFileManager::saveChampions() const
@@ -539,6 +550,50 @@ namespace neat_dnfs
 		{
 			tools::logger::log(tools::logger::LogLevel::ERROR,
 				"Failed to open objectives.jsonl for the per-generation objective record.");
+		}
+	}
+
+	void PopulationFileManager::saveParetoArchive() const
+	{
+		const std::string frontDirectory = fileDirectory + "pareto_front/";
+		std::filesystem::create_directories(frontDirectory);
+
+		nlohmann::json members = nlohmann::json::array();
+		for (const auto& entry : population->paretoArchive.members())
+		{
+			const auto alive = std::ranges::find_if(population->solutions,
+				[&entry](const SolutionPtr& solution) { return solution->getId() == entry.solutionId; });
+			const bool inFinalPopulation = alive != population->solutions.end();
+			if (inFinalPopulation)
+			{
+				saveSolutionPhenotype(*alive, frontDirectory);
+			}
+			members.push_back({
+				{"id", entry.solutionId},
+				{"generationFound", entry.generationFound},
+				{"objectives", entry.objectives},
+				{"partialFitness", entry.partials},
+				{"fitness", entry.fitness},
+				{"inFinalPopulation", inFinalPopulation}
+			});
+		}
+
+		const nlohmann::json record = {
+			{"mode", selectionModeName(SelectionConstants::mode)},
+			{"epsilon", SelectionConstants::dominanceEpsilon},
+			{"feasibilityFloor", SelectionConstants::feasibilityFloor},
+			{"objectiveGroups", SelectionConstants::objectiveGroups},
+			{"members", members}
+		};
+
+		std::ofstream archiveFile(fileDirectory + "pareto_archive.json");
+		if (archiveFile.is_open())
+		{
+			archiveFile << record.dump(4) << "\n";
+		}
+		else
+		{
+			tools::logger::log(tools::logger::LogLevel::ERROR, "Failed to open pareto_archive.json.");
 		}
 	}
 

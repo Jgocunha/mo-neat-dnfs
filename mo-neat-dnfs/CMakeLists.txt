@@ -391,6 +391,7 @@ add_executable(${TEST_PROJECT}
     "tests/test_species.cpp"
     "tests/test_pareto.cpp"
     "tests/test_selection_config.cpp"
+    "tests/test_pareto_selection.cpp"
     "tests/test_population.cpp"
     "tests/test_population_file_manager.cpp"
     "tests/test_speciation.cpp"
