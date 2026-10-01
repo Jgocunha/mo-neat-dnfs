@@ -34,7 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - the ranking runs every generation, whether or not `objectives.jsonl` is written;
   - at the end of the run, a new **`pareto_archive.json`** holds every archive member's id, generation found, objectives, partials, fitness and whether it is in the final population. The phenotypes of those still alive are saved under **`pareto_front/`**.
 
-  There is no preset yet: to turn it on, set the block in a `--config` file or an ablation preset.
+- **Pareto selection presets and per-task objectives.** `--ablation pareto-selection` turns Pareto selection on (ε 0.01, feasibility floor 0.1) and writes to `data/<Task> Pareto/`; `pareto-selection-no-floor` is the same with the floor off, under `data/<Task> Pareto NoFloor/`. Every task's `config/solutions/<task>.json` now groups its partials into 2–3 objectives (`SelectionConstants.objectiveGroups`). Scalar selection is unaffected; in scalar runs, `objectives.jsonl` now holds the grouped objectives instead of one objective per partial.
 
 ### Changed
 - **Split off from neat-dnfs as mo-neat-dnfs** (multi-objective neuroevolution of augmenting dynamic neural field topologies). Every entry below this one is neat-dnfs history, up to and including its v0.3.0 release. From here the two projects diverge: mo-neat-dnfs adds Pareto selection, and neat-dnfs stays single-objective. The rename is project-level only:
