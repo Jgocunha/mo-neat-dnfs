@@ -909,8 +909,12 @@ al.), NEAT-MODS μ+λ selection, NSGA-III, and objective names in config (the da
 - **Scalar runs' `objectives.jsonl` changes content.** It now holds the grouped objectives (and
   records the groups) rather than one objective per partial. Selection, and every other file, are
   unchanged.
-- `ScopedTaskConfig` now calls `SelectionConstants::reset()` on destruction, as the Phase 2 notes
-  required. A test pins it.
+- **`ScopedTaskConfig` reloads the reference config on destruction**, which is stronger than the
+  `SelectionConstants::reset()` the Phase 2 notes asked for. Resetting the globals is not enough:
+  `ConfigLoader` keeps the merged *task* config as the base that `applyAblation` merges onto, so
+  the next ablation test brought AND's groups back and 4 fast tests threw. CTest hides this
+  because it runs each test in its own process; it shows when the test binary runs all tests in
+  one process (`mo-neat-dnfs-test.exe "~[Evolution]"`). A test section pins it.
 - **The slow test does not assert "archive non-empty on `and`"** (§5): whether a 50 × 10 run reaches
   feasibility is up to the search, and `test_evolution_helpers.h` rules out stochastic assertions.
   It asserts the deterministic equivalent instead: in every generation, the archive is non-empty

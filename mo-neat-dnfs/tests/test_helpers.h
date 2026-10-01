@@ -18,9 +18,10 @@ namespace neat_dnfs::test {
 // evaluate() too -- Solution's bump-position tolerance is xSize/20, read at
 // evaluation time.
 //
-// SelectionConstants is reset to its defaults rather than restored: a task's
-// objectiveGroups index that task's partials, so left in place they make the
-// next task with a different partial count throw at construction.
+// The reference config is reloaded too, before the dimensions are restored. A
+// task's objectiveGroups index that task's partials, and the loader keeps the
+// merged task config as the base later ablations merge onto, so left in place
+// they make the next solution with a different partial count throw.
 class ScopedTaskConfig
 {
 public:
@@ -32,9 +33,9 @@ public:
 
     ~ScopedTaskConfig()
     {
+        ConfigLoader::loadGlobalConfig(ConfigLoader::defaultGlobalConfigPath());
         DimensionConstants::xSize = previousXSize;
         DimensionConstants::dx = previousDx;
-        SelectionConstants::reset();
     }
 
     ScopedTaskConfig(const ScopedTaskConfig&) = delete;

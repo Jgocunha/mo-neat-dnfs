@@ -332,6 +332,7 @@ TEST_CASE("Every task config groups its partials into the planned objectives", "
 
 TEST_CASE("ScopedTaskConfig restores the default selection settings", "[SelectionConfig]")
 {
+    const RestoreReferenceConfig restore;
     resetGlobalState();
     {
         const ScopedTaskConfig taskConfig{ "and" };
@@ -339,6 +340,14 @@ TEST_CASE("ScopedTaskConfig restores the default selection settings", "[Selectio
 
     requireDefaultSelection();
     REQUIRE_NOTHROW(XOR(makeTopology(2, 1)));
+
+    SECTION("including for an ablation applied afterwards")
+    {
+        REQUIRE(AblationPresets::applyByName("no-crossover"));
+
+        requireDefaultSelection();
+        REQUIRE_NOTHROW(XOR(makeTopology(2, 1)));
+    }
 }
 
 TEST_CASE("The pareto-selection presets switch on Pareto selection", "[SelectionConfig]")
