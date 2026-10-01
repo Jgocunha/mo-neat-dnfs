@@ -236,6 +236,11 @@ namespace neat_dnfs
 			}
 
 			const auto& block = j.at("SelectionConstants");
+			if (!block.is_object())
+			{
+				throw std::runtime_error("ConfigLoader: SelectionConstants must be an object, not "
+					+ std::string(block.type_name()) + ".");
+			}
 			checkNoUnknownSelectionKeys(block);
 			if (block.contains("mode"))
 			{
