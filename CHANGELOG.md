@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Groundwork for multi-objective (Pareto) selection.** Off by default: selection and every existing output are unchanged.
+  - `neat/pareto.h`: epsilon-dominance, Deb 2002 constrained-domination, the NSGA-II non-dominated sort and crowding distance, and a bounded `ParetoArchive`. All are pure functions with no RNG.
+  - A new, optional `SelectionConstants` config block (`mode`, `objectiveGroups`, `dominanceEpsilon`, `feasibilityFloor`, `archiveCapacity`). If the block, or any key in it, is absent, the default applies, so existing `--config` files keep loading. A mistyped key inside the block is an error.
+  - `objectiveGroups` partitions a task's partial fitnesses into objectives. Each solution validates it against its own partial count at construction, and derives `SolutionParameters::objectives` (the weighted mean of each group) after every `evaluate()`.
+  - A new, optional `PopulationConstants.saveObjectives` flag (default `true`). It is not used yet.
+
 ### Changed
 - **Split off from neat-dnfs as mo-neat-dnfs** (multi-objective neuroevolution of augmenting dynamic neural field topologies). Every entry below this one is neat-dnfs history, up to and including its v0.3.0 release. From here the two projects diverge: mo-neat-dnfs adds Pareto selection, and neat-dnfs stays single-objective. The rename is project-level only:
   - the nested project folder is now `mo-neat-dnfs/`, and the CMake project, library, test target and executables are `mo-neat-dnfs`, `mo-neat-dnfs-test`, `mo-neat-dnfs-evol`, `mo-neat-dnfs-inc-evol` and `mo-neat-dnfs-sol-eval`. The installed data directory is `share/mo-neat-dnfs/`, the CMake package is `mo-neat-dnfs`, and archives are named `mo-neat-dnfs-<version>-...`
