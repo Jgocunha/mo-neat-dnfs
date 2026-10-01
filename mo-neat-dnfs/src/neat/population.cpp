@@ -8,6 +8,7 @@
 #include <atomic>
 #include <thread>
 #include <cmath>
+#include <ranges>
 
 namespace neat_dnfs
 {
@@ -211,7 +212,8 @@ namespace neat_dnfs
 
 	bool Population::isRankingObjectives() const
 	{
-		return fileManager != nullptr && PopulationConstants::saveObjectives;
+		return SelectionConstants::mode == SelectionMode::Pareto
+			|| (fileManager != nullptr && PopulationConstants::saveObjectives);
 	}
 
 	void Population::rankObjectives()
@@ -226,16 +228,20 @@ namespace neat_dnfs
 		}
 
 		const auto fronts = nonDominatedSort(points, SelectionConstants::dominanceEpsilon);
+		const auto numberOfFronts = static_cast<double>(fronts.size());
 		for (size_t rank = 0; rank < fronts.size(); ++rank)
 		{
 			const auto distances = crowdingDistances(points, fronts[rank]);
+			const double selectionFitness = (numberOfFronts - static_cast<double>(rank)) / numberOfFronts;
 			for (size_t position = 0; position < fronts[rank].size(); ++position)
 			{
 				const size_t index = fronts[rank][position];
-				solutions[index]->setParetoRanking(static_cast<int>(rank), distances[position], points[index].violation);
+				solutions[index]->setParetoRanking(static_cast<int>(rank), distances[position], points[index].violation, selectionFitness);
 			}
 		}
+		const double violationToBeat = paretoArchive.bestViolationSeen();
 		offerFrontToArchive(points, fronts.front());
+		summarizeRanking(points, fronts, violationToBeat);
 	}
 
 	void Population::offerFrontToArchive(std::span<const RankedPoint> points, std::span<const size_t> front)
@@ -252,6 +258,45 @@ namespace neat_dnfs
 				acceptedIntoArchive.push_back(solution->getId());
 			}
 		}
+	}
+
+	void Population::summarizeRanking(std::span<const RankedPoint> points,
+		const std::vector<std::vector<size_t>>& fronts, const double violationToBeat)
+	{
+		const auto& frontZero = fronts.front();
+		rankingSummary.numberOfFronts = fronts.size();
+		rankingSummary.frontZeroSize = frontZero.size();
+		rankingSummary.frontZeroFeasible = static_cast<size_t>(std::ranges::count_if(frontZero,
+			[&points](const size_t index) { return points[index].violation == 0.0; }));
+		rankingSummary.lowestViolation = std::ranges::min(points | std::views::transform(&RankedPoint::violation));
+		rankingSummary.lowestViolationImproved = paretoArchive.size() == 0
+			&& rankingSummary.lowestViolation < violationToBeat - SelectionConstants::dominanceEpsilon;
+	}
+
+	bool Population::hasParetoFrontImproved() const
+	{
+		return !acceptedIntoArchive.empty() || rankingSummary.lowestViolationImproved;
+	}
+
+	bool Population::hasSpeciesImprovedOnTheFront(const Species& species) const
+	{
+		return std::ranges::any_of(species.getMembers(), [this](const SolutionPtr& member)
+			{
+				const bool accepted = std::ranges::find(acceptedIntoArchive, member->getId()) != acceptedIntoArchive.end();
+				const bool holdsNewLowestViolation = rankingSummary.lowestViolationImproved
+					&& member->getParameters().constraintViolation == rankingSummary.lowestViolation;
+				return accepted || holdsNewLowestViolation;
+			});
+	}
+
+	void Population::logParetoProgress(const int improvedSpecies) const
+	{
+		const auto stagnantSpecies = std::ranges::count_if(speciesList, [](const auto& species)
+			{ return !species->isExtinct() && !species->hasFitnessImprovedOverTheLastGenerations(); });
+		tools::logger::log(tools::logger::LogLevel::DEBUG, std::format(
+			"gen {}: {} fronts, front 0 holds {} of {} ({} feasible), archive {} (+{} accepted), {} species improved, {} stagnant",
+			parameters.currentGeneration, rankingSummary.numberOfFronts, rankingSummary.frontZeroSize, solutions.size(),
+			rankingSummary.frontZeroFeasible, paretoArchive.size(), acceptedIntoArchive.size(), improvedSpecies, stagnantSpecies));
 	}
 
 	void Population::speciate()
@@ -273,10 +318,7 @@ namespace neat_dnfs
 			}
 		}
 
-		for (const auto& species : speciesList)
-		{
-			species->assignChampion();
-		}
+		assignChampions();
 
 		if (validationPolicy == ValidationPolicy::Throw)
 		{
@@ -284,6 +326,27 @@ namespace neat_dnfs
 		}
 
 		calculateAdjustedFitness();
+	}
+
+	void Population::assignChampions()
+	{
+		if (SelectionConstants::mode == SelectionMode::Scalar)
+		{
+			for (const auto& species : speciesList)
+			{
+				species->assignChampion();
+			}
+			return;
+		}
+
+		int improvedSpecies = 0;
+		for (const auto& species : speciesList)
+		{
+			const bool improved = hasSpeciesImprovedOnTheFront(*species);
+			improvedSpecies += improved ? 1 : 0;
+			species->assignChampion(improved);
+		}
+		logParetoProgress(improvedSpecies);
 	}
 
 	void Population::reproduceAndSelect()
@@ -568,7 +631,7 @@ namespace neat_dnfs
 	std::shared_ptr<Species> Population::getBestActiveSpecies() const
 	{
 		std::shared_ptr<Species> bestSpecies = nullptr;
-		double bestFitness = 0.0;
+		SolutionPtr bestChampion = nullptr;
 		for (const auto& species : speciesList)
 		{
 			if (species->isExtinct())
@@ -580,9 +643,12 @@ namespace neat_dnfs
 			{
 				continue;
 			}
-			if (champ->getFitness() > bestFitness)
+			const bool isBest = bestChampion == nullptr
+				? SelectionConstants::mode == SelectionMode::Pareto || champ->getFitness() > 0.0
+				: champ->isPreferredTo(*bestChampion);
+			if (isBest)
 			{
-				bestFitness = champ->getFitness();
+				bestChampion = champ;
 				bestSpecies = species;
 			}
 		}
@@ -605,11 +671,11 @@ namespace neat_dnfs
 			// normal, recoverable state.
 			assert(species != nullptr && "solution must belong to a species when adjusted fitness is calculated");
 			const size_t speciesSize = species->size();
-			const double adjustedFitness = solution->getFitness() / static_cast<double>(speciesSize);
+			const double adjustedFitness = solution->getSelectionFitness() / static_cast<double>(speciesSize);
 			if (std::isnan (adjustedFitness))
 			{
 				log(tools::logger::LogLevel::FATAL, "Adjusted fitness is NaN.");
-				log(tools::logger::LogLevel::FATAL, std::format("Fitness: {} Species size: {}", solution->getFitness(), speciesSize));
+				log(tools::logger::LogLevel::FATAL, std::format("Fitness: {} Species size: {}", solution->getSelectionFitness(), speciesSize));
 				throw std::runtime_error("Adjusted fitness is NaN.");
 			}
 			solution->setAdjustedFitness(adjustedFitness);
@@ -650,10 +716,16 @@ namespace neat_dnfs
 
 	bool Population::hasFitnessImprovedOverTheLastGenerations()
 	{
-		if (bestSolution->getFitness() > previousBestFitness)
+		const bool bestFitnessImproved = bestSolution->getFitness() > previousBestFitness;
+		if (bestFitnessImproved)
 		{
+			// Elitism tracks the scalar best in both modes (decision D4).
 			previousBestFitness = bestSolution->getFitness();
 			previousBestSolution = bestSolution;
+		}
+		const bool improved = SelectionConstants::mode == SelectionMode::Pareto ? hasParetoFrontImproved() : bestFitnessImproved;
+		if (improved)
+		{
 			generationsWithoutImprovement = 0;
 			hasFitnessImproved = true;
 			return true;
@@ -709,7 +781,7 @@ namespace neat_dnfs
 			if (!championB) {
 				return true; // Non-null champions come before null ones
 			}
-			return championA->getFitness() > championB->getFitness(); // Sort by fitness
+			return championA->isPreferredTo(*championB);
 			});
 	}
 
@@ -870,7 +942,7 @@ namespace neat_dnfs
 		// Find and evict the current worst solution to make room, keeping
 		// solutions.size() == parameters.size (validatePopulationSize enforces this).
 		auto worstIt = std::ranges::min_element(solutions,
-			[](const SolutionPtr& a, const SolutionPtr& b) { return a->getFitness() < b->getFitness(); });
+			[](const SolutionPtr& a, const SolutionPtr& b) { return b->isPreferredTo(*a); });
 		if (worstIt == solutions.end())
 		{
 			return;

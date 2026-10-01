@@ -43,6 +43,9 @@ namespace neat_dnfs
 		double crowdingDistance{0.0};
 		/// Total shortfall of partialFitness below SelectionConstants::feasibilityFloor; 0 when feasible.
 		double constraintViolation{0.0};
+		/// Weight-free fitness derived from paretoRank, (fronts - rank) / fronts, in (0, 1].
+		/// Read through Solution::getSelectionFitness(), which ignores it in scalar mode.
+		double selectionFitness{0.0};
 
 		SolutionParameters(double fitness = 0.0,
 			double adjustedFitness = 0.0, int age = 0)
@@ -88,7 +91,10 @@ namespace neat_dnfs
 	/// - @c testPhenotype() — run the simulation and compute @c parameters.fitness
 	///
 	/// The fitness value set in @c testPhenotype() drives species assignment,
-	/// adjusted-fitness calculation, and offspring allocation.
+	/// adjusted-fitness calculation, and offspring allocation in scalar mode (the
+	/// default). In Pareto mode, selection reads the objective vector derived from
+	/// @c parameters.partialFitness instead (see isPreferredTo()), and the fitness
+	/// still picks the reported best solution and ends the run.
 	class Solution : public std::enable_shared_from_this<Solution>
 	{
 	protected:
@@ -148,7 +154,26 @@ namespace neat_dnfs
 		/// @param rank Front index, 0 for the non-dominated front.
 		/// @param crowdingDistance NSGA-II crowding distance within that front.
 		/// @param violation Total constraint violation used by the sort; 0 when feasible.
-		void setParetoRanking(int rank, double crowdingDistance, double violation);
+		/// @param selectionFitness Rank-derived fitness, (fronts - rank) / fronts.
+		void setParetoRanking(int rank, double crowdingDistance, double violation, double selectionFitness);
+		/// @brief The fitness that between-species offspring allocation divides by species size.
+		/// @return The weighted-sum fitness in scalar mode; the rank-derived selection fitness
+		/// recorded by setParetoRanking() in Pareto mode.
+		[[nodiscard]] double getSelectionFitness() const;
+		/// @brief The comparator every selection decision uses: sorting, pruning, champions,
+		/// the fitter crossover parent and the solution evicted for the preserved best.
+		/// @details Scalar mode: a higher fitness. Pareto mode: a lower front, then a larger
+		/// crowding distance; a solution not yet ranked (an offspring) loses to any ranked one.
+		/// @param other The solution to compare against.
+		/// @return True if this solution should be selected ahead of @p other.
+		[[nodiscard]] bool isPreferredTo(const Solution& other) const;
+		/// @brief Whether crossover should treat the two parents as equally fit, and so
+		/// inherit disjoint and excess genes from both at random.
+		/// @details Scalar mode: fitnesses within 1e-6. Pareto mode: the same front, and
+		/// neither constrained-dominates the other within SelectionConstants::dominanceEpsilon.
+		/// @param other The other parent.
+		/// @return True if neither parent is fitter than the other.
+		[[nodiscard]] bool isEquivalentForSelection(const Solution& other) const;
 		void buildPhenotype();
 		void clearPhenotype();
 		void addFieldGene(const FieldGene& gene);

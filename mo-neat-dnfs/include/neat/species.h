@@ -19,6 +19,9 @@ namespace neat_dnfs
         int age{0};
         bool hasFitnessImproved = true;
         int generationsSinceFitnessImproved = 0;
+
+        /// Resets the stagnation counter on an improvement, and increments it otherwise.
+        void recordImprovement(bool improved);
     public:
         Species();
 		~Species() = default;
@@ -28,7 +31,14 @@ namespace neat_dnfs
 		Species& operator=(Species&& other) noexcept = default;
         void setRepresentative(const SolutionPtr& newRepresentative);
         void randomlyAssignRepresentative();
+        /// @brief Sorts members by Solution::isPreferredTo(), makes the first the champion,
+        /// and counts the generation as an improvement if it beats the previous champion's fitness.
         void assignChampion();
+        /// @brief Sorts members by Solution::isPreferredTo() and makes the first the champion,
+        /// recording an improvement decided by the caller (Pareto mode: the archive accepted
+        /// one of this species' members this generation).
+        /// @param improvedThisGeneration Whether this generation counts as an improvement.
+        void assignChampion(bool improvedThisGeneration);
 
         [[nodiscard]] size_t size() const;
         void setOffspringCount(int count);
@@ -59,8 +69,10 @@ namespace neat_dnfs
         /// @brief Returns true if @p solution's genome is within the compatibility distance threshold of this species' representative.
         [[nodiscard]] bool isCompatible(const SolutionPtr& solution) const;
         [[nodiscard]] bool contains(const SolutionPtr& solution) const;
+        /// @brief Sorts members best first by Solution::isPreferredTo(): by fitness in scalar
+        /// mode, by front and crowding distance in Pareto mode.
         void sortMembersByFitness();
-        /// @brief Sorts members by fitness and removes the floor(size() * ratio) worst-performing members.
+        /// @brief Sorts members (see sortMembersByFitness()) and removes the floor(size() * ratio) worst-performing members.
         /// Reassigns the representative if it was among those removed.
         /// @param ratio Fraction of the current membership to remove, in [0, 1].
         void pruneWorsePerformingMembers(double ratio);

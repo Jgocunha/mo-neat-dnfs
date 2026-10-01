@@ -150,6 +150,22 @@ namespace neat_dnfs
 		/// Ids of the front-0 solutions the archive accepted this generation.
 		std::vector<int> acceptedIntoArchive;
 
+		/// @brief What the latest Pareto ranking found beyond the archive's accepted ids:
+		/// the inputs of the archive-empty improvement fallback and of the per-generation
+		/// DEBUG sentence.
+		struct ParetoRankingSummary
+		{
+			size_t numberOfFronts{0};
+			size_t frontZeroSize{0};
+			size_t frontZeroFeasible{0};
+			/// The smallest constraint violation in the population.
+			double lowestViolation{0.0};
+			/// The archive is empty and lowestViolation fell below every violation offered
+			/// to it before by more than SelectionConstants::dominanceEpsilon.
+			bool lowestViolationImproved{false};
+		};
+		ParetoRankingSummary rankingSummary;
+
 		// Not thread-safe; only ever called from upkeep()/speciate(), both
 		// main-thread. Must not be called from the parallel evaluate() path.
 		void reportViolation(ValidationCheck check, const std::string& message);
@@ -209,12 +225,15 @@ namespace neat_dnfs
 	private:
 		static inline ValidationPolicy defaultValidationPolicy = ValidationPolicy::Log;
 		void evaluate() const;
-		/// @brief Whether this generation's solutions are Pareto-ranked. For now only
-		/// objectives.jsonl reads the ranks, so they are computed only when it is written.
-		/// @return True when file I/O is enabled and PopulationConstants::saveObjectives is set.
+		/// @brief Whether this generation's solutions are Pareto-ranked: always in Pareto
+		/// mode, where selection reads the ranks, and in scalar mode only when
+		/// objectives.jsonl is written.
+		/// @return True in Pareto mode, or when file I/O is enabled and
+		/// PopulationConstants::saveObjectives is set.
 		[[nodiscard]] bool isRankingObjectives() const;
 		/// @brief Non-dominated sort and crowding distance over the whole population,
-		/// written into each solution's parameters, then offers front 0 to the archive.
+		/// written into each solution's parameters with its rank-derived selection fitness,
+		/// then offers front 0 to the archive and fills rankingSummary.
 		/// Draws no random numbers. Runs on the main thread, after evaluate().
 		void rankObjectives();
 		/// @brief Offers each member of @p front to the Pareto archive and records the ids it
@@ -222,7 +241,32 @@ namespace neat_dnfs
 		/// @param points The ranked population, indexed like solutions.
 		/// @param front Indices of front 0.
 		void offerFrontToArchive(std::span<const RankedPoint> points, std::span<const size_t> front);
+		/// @brief Fills rankingSummary from this generation's ranking.
+		/// @param points The ranked population, indexed like solutions.
+		/// @param fronts The fronts nonDominatedSort() returned for @p points.
+		/// @param violationToBeat The archive's bestViolationSeen() before this generation's offers.
+		void summarizeRanking(std::span<const RankedPoint> points,
+			const std::vector<std::vector<size_t>>& fronts, double violationToBeat);
+		/// @brief The Pareto-mode "population improved" signal of the latest ranking.
+		/// @return True if the archive accepted a point, or, while the archive is empty,
+		/// the lowest violation fell by more than SelectionConstants::dominanceEpsilon.
+		[[nodiscard]] bool hasParetoFrontImproved() const;
+		/// @brief The Pareto-mode "species improved" signal of the latest ranking.
+		/// @details Reads @p species' current members, so it must run after speciate() has
+		/// placed them: an archive entry's own species id is the previous generation's.
+		/// @param species The species to check.
+		/// @return True if the archive accepted one of its members, or, under the
+		/// archive-empty fallback, it holds a member with the new lowest violation.
+		[[nodiscard]] bool hasSpeciesImprovedOnTheFront(const Species& species) const;
+		/// @brief Logs the per-generation Pareto DEBUG sentence: fronts, front 0, archive,
+		/// and how many species improved and how many are stagnant.
+		/// @param improvedSpecies Number of species that improved this generation.
+		void logParetoProgress(int improvedSpecies) const;
 		void speciate();
+		/// @brief Picks every species' champion. In scalar mode a species improves when its
+		/// champion's fitness rises; in Pareto mode when hasSpeciesImprovedOnTheFront() says so,
+		/// after which the per-generation Pareto DEBUG sentence is logged.
+		void assignChampions();
 		void reproduceAndSelect();
 
 		[[nodiscard]] bool endConditionMet() const;
@@ -235,6 +279,9 @@ namespace neat_dnfs
 
 		void assignToSpecies(const SolutionPtr& solution);
 		std::shared_ptr<Species> findSpecies(const SolutionPtr& solution);
+		/// @brief The active species whose champion is preferred (Solution::isPreferredTo())
+		/// over every other champion. In scalar mode a champion must also have a positive fitness.
+		/// @return That species, or nullptr if there is none.
 		[[nodiscard]] std::shared_ptr<Species> getBestActiveSpecies() const;
 
 		void calculateAdjustedFitness();

@@ -37,7 +37,26 @@ namespace neat_dnfs
 
 		const double prevFitness = champion == nullptr ? 0 : champion->getParameters().fitness;
 		const double currentFitness = members[0]->getParameters().fitness;
-		if (currentFitness > prevFitness)
+		recordImprovement(currentFitness > prevFitness);
+
+		champion = members[0];
+	}
+
+	void Species::assignChampion(const bool improvedThisGeneration)
+	{
+		if (members.empty())
+		{
+			return;
+		}
+
+		sortMembersByFitness();
+		recordImprovement(improvedThisGeneration);
+		champion = members[0];
+	}
+
+	void Species::recordImprovement(const bool improved)
+	{
+		if (improved)
 		{
 			hasFitnessImproved = true;
 			generationsSinceFitnessImproved = 0;
@@ -47,8 +66,6 @@ namespace neat_dnfs
 			hasFitnessImproved = false;
 			generationsSinceFitnessImproved++;
 		}
-
-		champion = members[0];
 	}
 
 	size_t Species::size() const
@@ -184,7 +201,7 @@ namespace neat_dnfs
 	{
 		std::ranges::sort(members, [](const SolutionPtr& a, const SolutionPtr& b)
 			{
-				return a->getParameters().fitness > b->getParameters().fitness;
+				return a->isPreferredTo(*b);
 			}
 		);
 	}

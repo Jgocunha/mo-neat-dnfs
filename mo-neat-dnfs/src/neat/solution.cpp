@@ -608,11 +608,54 @@ namespace neat_dnfs
 		parameters.adjustedFitness = adjustedFitness;
 	}
 
-	void Solution::setParetoRanking(const int rank, const double crowdingDistance, const double violation)
+	void Solution::setParetoRanking(const int rank, const double crowdingDistance, const double violation, const double selectionFitness)
 	{
 		parameters.paretoRank = rank;
 		parameters.crowdingDistance = crowdingDistance;
 		parameters.constraintViolation = violation;
+		parameters.selectionFitness = selectionFitness;
+	}
+
+	double Solution::getSelectionFitness() const
+	{
+		return SelectionConstants::mode == SelectionMode::Pareto ? parameters.selectionFitness : parameters.fitness;
+	}
+
+	namespace
+	{
+		// A solution the population has not ranked yet sorts behind every front.
+		int frontOrLast(const SolutionParameters& parameters)
+		{
+			return parameters.paretoRank < 0 ? std::numeric_limits<int>::max() : parameters.paretoRank;
+		}
+	}
+
+	bool Solution::isPreferredTo(const Solution& other) const
+	{
+		if (SelectionConstants::mode == SelectionMode::Scalar)
+		{
+			return parameters.fitness > other.parameters.fitness;
+		}
+		const int front = frontOrLast(parameters);
+		const int otherFront = frontOrLast(other.parameters);
+		return front < otherFront
+			|| (front == otherFront && parameters.crowdingDistance > other.parameters.crowdingDistance);
+	}
+
+	bool Solution::isEquivalentForSelection(const Solution& other) const
+	{
+		if (SelectionConstants::mode == SelectionMode::Scalar)
+		{
+			return std::abs(parameters.fitness - other.parameters.fitness) < 1e-6;
+		}
+		if (parameters.paretoRank != other.parameters.paretoRank)
+		{
+			return false;
+		}
+		const RankedPoint self{ parameters.objectives, parameters.constraintViolation };
+		const RankedPoint peer{ other.parameters.objectives, other.parameters.constraintViolation };
+		const double epsilon = SelectionConstants::dominanceEpsilon;
+		return !constrainedDominates(self, peer, epsilon) && !constrainedDominates(peer, self, epsilon);
 	}
 
 	void Solution::addFieldGene(const FieldGene& gene)
@@ -640,9 +683,9 @@ namespace neat_dnfs
 		// and then call solution->crossover(other);
 		const SolutionPtr self = shared_from_this();
 
-		const double fitnessDifference = std::abs(self->getFitness() - other->getFitness());
-		const SolutionPtr moreFitParent = self->getFitness() > other->getFitness() ? self : other;
-		const SolutionPtr lessFitParent = self->getFitness() > other->getFitness() ? other : self;
+		const bool parentsAreEquivalent = self->isEquivalentForSelection(*other);
+		const SolutionPtr moreFitParent = self->isPreferredTo(*other) ? self : other;
+		const SolutionPtr lessFitParent = self->isPreferredTo(*other) ? other : self;
 
 		SolutionPtr offspring = moreFitParent->clone();
 		offspring->setParents(moreFitParent->getId(), lessFitParent->getId());
@@ -672,10 +715,10 @@ namespace neat_dnfs
 			else
 			{
 				// Disjoint and excess genes are inherited from the more fit parent
-				// unless the fitness difference is 0, in which case the gene is inherited randomly
+				// unless the parents are equivalent, in which case the gene is inherited randomly
 				// here we are only considering the most fit parent
 				// later add randomly from the less fit parent
-				if (fitnessDifference < 1e-6)
+				if (parentsAreEquivalent)
 				{
 					if (tools::utils::generateRandomInt(0, 1) != 0)
 					{
@@ -689,9 +732,9 @@ namespace neat_dnfs
 			}
 		}
 
-		// If the fitness is the same we still have to randomly inherit the excess and disjoint genes
+		// If the parents are equivalent we still have to randomly inherit the excess and disjoint genes
 		// from the less fit parent
-		if (fitnessDifference < 1e-6)
+		if (parentsAreEquivalent)
 		{
 			const auto& lessFitParentConnectionGenes = lessFitParent->getGenome().getConnectionGenes();
 			for (const auto& gene : lessFitParentConnectionGenes)
@@ -733,7 +776,7 @@ namespace neat_dnfs
 					inFieldGeneId == otherGene.getInFieldGeneId() &&
 					outFieldGeneId == otherGene.getOutFieldGeneId())
 				{
-					if (fitnessDifference < 1e-6)
+					if (parentsAreEquivalent)
 					{
 						tools::logger::log(tools::logger::LogLevel::ERROR, "Crossover produced offspring with duplicate connection genes.");
 					}

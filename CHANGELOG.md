@@ -22,6 +22,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - The Experiment page can show every run's final hypervolume and the union of their final fronts. The Compare page can compare final hypervolume across experiments of the same task, with a Mann–Whitney U test. The run export gains a Pareto section.
   - The statistics scan now also caches a per-individual table, so the on-disk cache version is bumped and existing `.viz_cache/` entries are rebuilt once.
   - Fixed: `theme.theme_type()` now follows the server's configured `theme.base` first, since Streamlit 1.52 reports a "light" theme context even on a dark-configured server.
+- **Pareto selection mode** (`SelectionConstants.mode = "pareto"`). Scalar mode stays the default, and behaves exactly as before. In Pareto mode:
+  - every selection decision compares solutions by Pareto front, then by crowding distance, instead of by weighted-sum fitness. This covers species sorting, pruning and champions, the fitter crossover parent, the best species, and the solution evicted to make room for the preserved best. Crossover treats two parents as equally fit when they are on the same front and neither dominates the other. Offspring that have not been ranked yet sort last;
+  - offspring are allocated between species from a weight-free selection fitness, `(fronts − rank) / fronts`, divided by species size;
+  - stagnation counts archive progress, not best-fitness gains:
+    - the population improves when the archive accepts a point, or, while nothing is feasible, when the lowest constraint violation falls by more than ε;
+    - a species improves when the archive accepts one of its current members.
+
+    The `hasFitnessImproved` value that `overview.jsonl` and `per_generation_overview.txt` already write reports this signal;
+  - the weighted-sum best solution, elitism and the end condition (`targetFitness`) are unchanged, so scalar and Pareto runs stop under the same rule;
+  - the ranking runs every generation, whether or not `objectives.jsonl` is written;
+  - at the end of the run, a new **`pareto_archive.json`** holds every archive member's id, generation found, objectives, partials, fitness and whether it is in the final population. The phenotypes of those still alive are saved under **`pareto_front/`**.
+
+  There is no preset yet: to turn it on, set the block in a `--config` file or an ablation preset.
 
 ### Changed
 - **Split off from neat-dnfs as mo-neat-dnfs** (multi-objective neuroevolution of augmenting dynamic neural field topologies). Every entry below this one is neat-dnfs history, up to and including its v0.3.0 release. From here the two projects diverge: mo-neat-dnfs adds Pareto selection, and neat-dnfs stays single-objective. The rename is project-level only:
