@@ -933,3 +933,10 @@ al.), NEAT-MODS μ+λ selection, NSGA-III, and objective names in config (the da
 - **Still open, for the user: `pareto_front/` is usually empty.** See the Phase 5 note. Keeping a
   genome copy in `ParetoArchiveEntry` would fix it, but it changes what the archive stores, so it
   was not done in Phase 6.
+
+### Phase 7, reduced (2026-10-02)
+- 8 arms x 5 runs x pop 200 x 60 gens on an instrumented scratch build. Results, the mechanisms
+  the trace exposed, and three candidate changes awaiting a decision are in
+  `.claude/notes/MOO/phase7-reduced-findings.md`.
+- `saveParetoFront` (PR #10) saves `pareto_front/gen N/` per generation, numbered like
+  `objectives.jsonl`, one less than `solutions/gen N/` (a pre-existing offset, see the findings).
