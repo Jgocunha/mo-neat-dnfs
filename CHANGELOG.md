@@ -37,6 +37,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   There is no preset yet: to turn it on, set the block in a `--config` file or an ablation preset.
 
 ### Changed
+- **Synced with neat-dnfs #120** (validate and retune task fitness, add the HRI packaging task). In this repository:
+  - **The end condition changed:** evolution stops early only when every partial fitness of the best solution clears `targetFitness`, not the weighted total. Scalar and Pareto mode share this rule.
+  - A new task, `hri-packaging` (3 inputs, 1 output, 7 partials). It has no `objectiveGroups` yet, so in Pareto mode each partial is its own objective.
+  - Retuned fitness for `and`, `xor`, `detection-instability`, `memory-instability` and `selection-instability`, and retuned fields, mutation rates and speciation for `dmts`, `ior` and `memory-trace`. Every task keeps its partial count and order, so the objective groupings still apply. `and`'s second and fourth terms now reward a pre-shaped output while one input is on.
+  - Fixes: `and` recorded its first partial twice and never its second; `moveGaussianStimulusContinuously` now moves in both directions, rejects bad input and always terminates; a peak with a balanced inhibitory surround no longer scores as a field at rest; `best_solutions/last_generation` is gated on `saveBestSolutions`; `selection-instability` runs at `deltaT` 1 to stop NaN fitness.
+  - **Templates are now `.dnf`.** The `.json` templates and the unused `selection`, `self-sustained-memory`, `single-bump-propagation`, `and-preshape-test`, `test-dmts` and `test-ior` templates are gone, so a script passing one of them to `--template` needs updating.
+  - Fitness values change for `and`, `xor`, `selection-instability` and `hri-packaging`, and earlier `and` results are optimistic, so runs from before this sync are not directly comparable.
 - **Split off from neat-dnfs as mo-neat-dnfs** (multi-objective neuroevolution of augmenting dynamic neural field topologies). Every entry below this one is neat-dnfs history, up to and including its v0.3.0 release. From here the two projects diverge: mo-neat-dnfs adds Pareto selection, and neat-dnfs stays single-objective. The rename is project-level only:
   - the nested project folder is now `mo-neat-dnfs/`, and the CMake project, library, test target and executables are `mo-neat-dnfs`, `mo-neat-dnfs-test`, `mo-neat-dnfs-evol`, `mo-neat-dnfs-inc-evol` and `mo-neat-dnfs-sol-eval`. The installed data directory is `share/mo-neat-dnfs/`, the CMake package is `mo-neat-dnfs`, and archives are named `mo-neat-dnfs-<version>-...`
   - the reference config is now `config/mo_neat_dnfs.json`, and the dashboard entry point is `analysis/mo-neat-dnfs-visualizer.py`
