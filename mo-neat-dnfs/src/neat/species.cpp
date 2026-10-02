@@ -26,20 +26,22 @@ namespace neat_dnfs
 		representative = members[tools::utils::generateRandomInt(0, static_cast<int>(members.size() - 1))];
 	}
 
-	void Species::assignChampion()
+	bool Species::assignChampion()
 	{
 		if (members.empty())
 		{
-			return;
+			return false;
 		}
 
 		sortMembersByFitness();
 
 		const double prevFitness = champion == nullptr ? 0 : champion->getParameters().fitness;
 		const double currentFitness = members[0]->getParameters().fitness;
-		recordImprovement(currentFitness > prevFitness);
+		const bool improved = currentFitness > prevFitness;
+		recordImprovement(improved);
 
 		champion = members[0];
+		return improved;
 	}
 
 	void Species::assignChampion(const bool improvedThisGeneration)

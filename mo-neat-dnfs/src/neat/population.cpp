@@ -358,12 +358,21 @@ namespace neat_dnfs
 			return;
 		}
 
+		const bool judgedByFitness = SelectionConstants::stagnationSignal == StagnationSignal::Fitness;
 		int improvedSpecies = 0;
 		for (const auto& species : speciesList)
 		{
-			const bool improved = !species->isExtinct() && offerSpeciesToItsFront(*species);
+			bool improved = false;
+			if (judgedByFitness)
+			{
+				improved = species->assignChampion();
+			}
+			else
+			{
+				improved = !species->isExtinct() && offerSpeciesToItsFront(*species);
+				species->assignChampion(improved);
+			}
 			improvedSpecies += improved ? 1 : 0;
-			species->assignChampion(improved);
 		}
 		forgetFrontsOfExtinctSpecies();
 		logParetoProgress(improvedSpecies);
@@ -743,7 +752,9 @@ namespace neat_dnfs
 			previousBestFitness = bestSolution->getFitness();
 			previousBestSolution = bestSolution;
 		}
-		const bool improved = SelectionConstants::mode == SelectionMode::Pareto ? hasParetoFrontImproved() : bestFitnessImproved;
+		const bool judgedByFront = SelectionConstants::mode == SelectionMode::Pareto
+			&& SelectionConstants::stagnationSignal == StagnationSignal::Front;
+		const bool improved = judgedByFront ? hasParetoFrontImproved() : bestFitnessImproved;
 		if (improved)
 		{
 			generationsWithoutImprovement = 0;

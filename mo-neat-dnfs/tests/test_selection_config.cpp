@@ -70,6 +70,7 @@ namespace
         SelectionConstants::archiveCapacity = 5;
         SelectionConstants::archiveEpsilon = 0.25;
         SelectionConstants::violationEpsilon = 0.35;
+        SelectionConstants::stagnationSignal = StagnationSignal::Fitness;
     }
 
     // Asserts every selection field holds its compiled-in default.
@@ -82,6 +83,7 @@ namespace
         REQUIRE(SelectionConstants::archiveCapacity == 100);
         REQUIRE(SelectionConstants::archiveEpsilon == 0.0);
         REQUIRE(SelectionConstants::violationEpsilon == 0.0);
+        REQUIRE(SelectionConstants::stagnationSignal == StagnationSignal::Front);
     }
 
     // Restores the default (empty) grouping even when construction throws.
@@ -457,4 +459,21 @@ TEST_CASE("ConfigLoader rejects out-of-range tolerances", "[SelectionConfig]")
         REQUIRE_THROWS_WITH(loadWithSelectionBlock(block, "out-of-range-tolerance.json"),
             Catch::Matchers::ContainsSubstring(block.begin().key()));
     }
+}
+
+TEST_CASE("ConfigLoader reads stagnationSignal and rejects an unknown one", "[SelectionConfig]")
+{
+    const RestoreReferenceConfig restore;
+
+    loadWithSelectionBlock({ { "stagnationSignal", "fitness" } }, "stagnation-fitness.json");
+    REQUIRE(SelectionConstants::stagnationSignal == StagnationSignal::Fitness);
+
+    loadWithSelectionBlock({ { "stagnationSignal", "front" } }, "stagnation-front.json");
+    REQUIRE(SelectionConstants::stagnationSignal == StagnationSignal::Front);
+
+    loadWithSelectionBlock(json::object(), "stagnation-default.json");
+    REQUIRE(SelectionConstants::stagnationSignal == StagnationSignal::Front);
+
+    REQUIRE_THROWS_WITH(loadWithSelectionBlock({ { "stagnationSignal", "archive" } }, "stagnation-unknown.json"),
+        Catch::Matchers::ContainsSubstring("stagnationSignal"));
 }

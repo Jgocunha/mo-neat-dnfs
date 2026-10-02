@@ -498,6 +498,12 @@ namespace neat_dnfs
 			return mode == SelectionMode::Pareto ? "pareto" : "scalar";
 		}
 
+		// The same spelling the config uses for SelectionConstants.stagnationSignal.
+		std::string stagnationSignalName(const StagnationSignal signal)
+		{
+			return signal == StagnationSignal::Fitness ? "fitness" : "front";
+		}
+
 		// JSON has no infinity: a boundary point's crowding distance is written as null.
 		nlohmann::json finiteOrNull(const double value)
 		{
@@ -535,6 +541,7 @@ namespace neat_dnfs
 			{"epsilon", SelectionConstants::dominanceEpsilon},
 			{"archiveEpsilon", SelectionConstants::archiveEpsilon},
 			{"violationEpsilon", SelectionConstants::violationEpsilon},
+			{"stagnationSignal", stagnationSignalName(SelectionConstants::stagnationSignal)},
 			{"feasibilityFloor", SelectionConstants::feasibilityFloor},
 			{"objectiveGroups", SelectionConstants::objectiveGroups},
 			{"individuals", individuals},
@@ -606,6 +613,7 @@ namespace neat_dnfs
 			{"epsilon", SelectionConstants::dominanceEpsilon},
 			{"archiveEpsilon", SelectionConstants::archiveEpsilon},
 			{"violationEpsilon", SelectionConstants::violationEpsilon},
+			{"stagnationSignal", stagnationSignalName(SelectionConstants::stagnationSignal)},
 			{"feasibilityFloor", SelectionConstants::feasibilityFloor},
 			{"objectiveGroups", SelectionConstants::objectiveGroups},
 			{"members", members}

@@ -496,6 +496,47 @@ TEST_CASE("Pareto-mode improvement falls back to the lowest violation while noth
     REQUIRE(PopulationTestAccess::archiveSize(*population) == 0);
 }
 
+TEST_CASE("Pareto mode with the fitness stagnation signal counts best-fitness gains, as scalar mode does", "[ParetoSelection]")
+{
+    const ScopedParetoSelection pareto;
+    SelectionConstants::stagnationSignal = StagnationSignal::Fitness;
+    const auto population = populationAt({ { 0.8, 0.2 }, { 0.2, 0.8 } });
+    PopulationTestAccess::rankObjectives(*population);
+
+    // The front never moves, but the scalar best rises every generation: never stagnant.
+    for (int generation = 1; generation <= 2 * PopulationConstants::generationsWithoutImprovementThresholdInPopulation; ++generation)
+    {
+        PopulationTestAccess::rankObjectives(*population);
+        PopulationTestAccess::setBestSolution(*population, evaluatedAt({ 0.5 }, 0.01 * generation));
+        REQUIRE(PopulationTestAccess::hasFitnessImprovedOverTheLastGenerations(*population));
+    }
+}
+
+TEST_CASE("Pareto mode with the fitness stagnation signal judges species by their champion's fitness", "[ParetoSelection]")
+{
+    const ScopedParetoSelection pareto;
+    SelectionConstants::stagnationSignal = StagnationSignal::Fitness;
+    const auto population = populationAt({ { 0.8, 0.2 } });
+    auto& speciesList = PopulationTestAccess::speciesList(*population);
+    const auto species = std::make_shared<Species>();
+    speciesList.push_back(species);
+
+    // Champion fitness 0.3, then 0.3 again: the second generation is no improvement.
+    species->addSolution(rankedAt({ 0.8, 0.2 }, 0.3, 0, 1.0));
+    PopulationTestAccess::assignChampions(*population);
+    REQUIRE(species->hasFitnessImprovedOverTheLastGenerations());
+    for (int generation = 0; generation < PopulationConstants::generationsWithoutImprovementThresholdInSpecies; ++generation)
+    {
+        PopulationTestAccess::assignChampions(*population);
+    }
+    REQUIRE_FALSE(species->hasFitnessImprovedOverTheLastGenerations());
+
+    // A fitter champion counts, even though it adds nothing to the species' front.
+    species->addSolution(rankedAt({ 0.8, 0.2 }, 0.4, 0, 2.0));
+    PopulationTestAccess::assignChampions(*population);
+    REQUIRE(species->hasFitnessImprovedOverTheLastGenerations());
+}
+
 TEST_CASE("Pareto-mode species improvement is a member entering the species' own front", "[ParetoSelection]")
 {
     const ScopedParetoSelection pareto;

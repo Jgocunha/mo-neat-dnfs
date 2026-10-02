@@ -33,7 +33,8 @@ namespace neat_dnfs
         void randomlyAssignRepresentative();
         /// @brief Sorts members by Solution::isPreferredTo(), makes the first the champion,
         /// and counts the generation as an improvement if it beats the previous champion's fitness.
-        void assignChampion();
+        /// @return Whether this generation counted as an improvement.
+        bool assignChampion();
         /// @brief Sorts members by Solution::isPreferredTo() and makes the first the champion,
         /// recording an improvement decided by the caller (Pareto mode: the archive accepted
         /// one of this species' members this generation).

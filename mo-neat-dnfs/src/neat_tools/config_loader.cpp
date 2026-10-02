@@ -194,6 +194,20 @@ namespace neat_dnfs
 				+ "' is unknown; expected \"scalar\" or \"pareto\".");
 		}
 
+		StagnationSignal parseStagnationSignal(const std::string& name)
+		{
+			if (name == "front")
+			{
+				return StagnationSignal::Front;
+			}
+			if (name == "fitness")
+			{
+				return StagnationSignal::Fitness;
+			}
+			throw std::runtime_error("ConfigLoader: SelectionConstants.stagnationSignal '" + name
+				+ "' is unknown; expected \"front\" or \"fitness\".");
+		}
+
 		// Throws naming the key when value is outside [min, maxExclusive).
 		void requireInRange(const char* key, const double value, const double min, const double maxExclusive)
 		{
@@ -213,7 +227,7 @@ namespace neat_dnfs
 		{
 			static const std::set<std::string> known = {
 				"mode", "objectiveGroups", "dominanceEpsilon", "feasibilityFloor", "archiveCapacity",
-				"archiveEpsilon", "violationEpsilon",
+				"archiveEpsilon", "violationEpsilon", "stagnationSignal",
 			};
 			for (const auto& item : block.items())
 			{
@@ -258,6 +272,10 @@ namespace neat_dnfs
 			}
 			SelectionConstants::archiveEpsilon = block.value("archiveEpsilon", SelectionConstants::dominanceEpsilon);
 			requireInRange("archiveEpsilon", SelectionConstants::archiveEpsilon, 0.0, 0.5);
+			if (block.contains("stagnationSignal"))
+			{
+				SelectionConstants::stagnationSignal = parseStagnationSignal(block.at("stagnationSignal").get<std::string>());
+			}
 			if (block.contains("violationEpsilon"))
 			{
 				ConfigLoader::field(block, "violationEpsilon", &SelectionConstants::violationEpsilon);

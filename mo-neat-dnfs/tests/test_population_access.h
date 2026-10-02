@@ -16,6 +16,7 @@ class PopulationTestAccess
 {
 public:
     static void speciate(Population& population) { population.speciate(); }
+    static void assignChampions(Population& population) { population.assignChampions(); }
     static void reproduceAndSelect(Population& population) { population.reproduceAndSelect(); }
     static std::vector<std::shared_ptr<Species>>& speciesList(Population& population) { return population.speciesList; }
     static void setBestSolution(Population& population, const SolutionPtr& solution) { population.bestSolution = solution; }

@@ -309,6 +309,13 @@ namespace neat_dnfs
 		Pareto	///< dominance over the objective vector (see neat/pareto.h)
 	};
 
+	/// @brief What counts as "improved" for Pareto mode's stagnation bookkeeping.
+	enum class StagnationSignal
+	{
+		Front,	///< a point entering the archive (population) or the species' own front (species)
+		Fitness	///< the weighted-sum rules scalar mode uses: the best fitness, the champion's fitness
+	};
+
 	/// @brief Multi-objective selection settings (config block "SelectionConstants").
 	/// @details The exception to this file's no-fallback rule: every field has a
 	/// compiled-in default, and ConfigLoader restores them when a config has no
@@ -332,6 +339,9 @@ namespace neat_dnfs
 		// Two infeasible solutions whose violations differ by less than this are
 		// compared by their objectives instead; 0 is Deb's exact rule.
 		inline static double violationEpsilon = 0.0;
+		// Fitness gives Pareto mode exactly scalar mode's stagnation bookkeeping, so
+		// the two modes differ only in how they rank.
+		inline static StagnationSignal stagnationSignal = StagnationSignal::Front;
 
 		/// @brief Restores every field to its compiled-in default.
 		static void reset()
@@ -343,6 +353,7 @@ namespace neat_dnfs
 			archiveCapacity = 100;
 			archiveEpsilon = 0.0;
 			violationEpsilon = 0.0;
+			stagnationSignal = StagnationSignal::Front;
 		}
 	};
 

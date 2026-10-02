@@ -271,9 +271,11 @@ namespace neat_dnfs
 		/// @param improvedSpecies Number of species that improved this generation.
 		void logParetoProgress(int improvedSpecies) const;
 		void speciate();
-		/// @brief Picks every species' champion. In scalar mode a species improves when its
-		/// champion's fitness rises; in Pareto mode when offerSpeciesToItsFront() says so,
-		/// after which the per-generation Pareto DEBUG sentence is logged.
+		/// @brief Picks every species' champion. A species improves when its champion's
+		/// fitness rises: in scalar mode, and in Pareto mode with StagnationSignal::Fitness.
+		/// In Pareto mode with StagnationSignal::Front it improves when
+		/// offerSpeciesToItsFront() says so. Pareto mode then logs its per-generation
+		/// DEBUG sentence.
 		void assignChampions();
 		void reproduceAndSelect();
 
