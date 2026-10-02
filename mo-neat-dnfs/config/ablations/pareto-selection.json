@@ -1,0 +1,10 @@
+{
+  "AblationConstants": {
+    "label": " Pareto"
+  },
+  "SelectionConstants": {
+    "mode": "pareto",
+    "dominanceEpsilon": 0.01,
+    "feasibilityFloor": 0.1
+  }
+}

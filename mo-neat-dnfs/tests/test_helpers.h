@@ -17,6 +17,11 @@ namespace neat_dnfs::test {
 // it *before* defaultTopologyFor(), which reads xSize, and keep it alive across
 // evaluate() too -- Solution's bump-position tolerance is xSize/20, read at
 // evaluation time.
+//
+// The reference config is reloaded too, before the dimensions are restored. A
+// task's objectiveGroups index that task's partials, and the loader keeps the
+// merged task config as the base later ablations merge onto, so left in place
+// they make the next solution with a different partial count throw.
 class ScopedTaskConfig
 {
 public:
@@ -28,6 +33,7 @@ public:
 
     ~ScopedTaskConfig()
     {
+        ConfigLoader::loadGlobalConfig(ConfigLoader::defaultGlobalConfigPath());
         DimensionConstants::xSize = previousXSize;
         DimensionConstants::dx = previousDx;
     }

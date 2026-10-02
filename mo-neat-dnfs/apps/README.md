@@ -34,6 +34,10 @@ Available tasks: `and`, `xor`, `detection-instability`, `memory-instability`,
 Available ablations: `no-growth-io-only`, `no-growth-reference-hidden-field-count`,
 `no-speciation`, `no-crossover`, `random-initial-topology`.
 
+Selection presets, passed through `--ablation` the same way: `pareto-selection` (Pareto
+selection, ε 0.01, feasibility floor 0.1) and `pareto-selection-no-floor` (the same, with
+the floor off).
+
 ## Configuration
 
 Hyperparameters are loaded at startup, not compiled in. `config/mo_neat_dnfs.json` is the
@@ -47,6 +51,12 @@ settings: the `SelectionConstants` block, each key in it, and `PopulationConstan
 may be omitted and fall back to their defaults (scalar selection; `saveObjectives` true), so a
 `--config` file written before they existed keeps loading. A mistyped key inside
 `SelectionConstants` is still an error.
+
+Each `config/solutions/<task>.json` also sets `SelectionConstants.objectiveGroups`, which
+partitions that task's partial fitnesses into the objectives Pareto selection ranks on (for
+`and`: input representation, output logic, return to rest). Scalar selection ignores them;
+they only shape `objectives.jsonl`. A grouping that is not a partition of the task's partials
+is a startup error.
 
 Ablation presets live in `config/ablations/` and are the third layer, merged over the first
 two when `--ablation` is passed; adding a file adds a preset, with no code change. A preset
@@ -100,6 +110,18 @@ done
 
 Each arm writes to its own `data/<Task>/` or `data/<Task> <Ablation>/` folder, so the
 [analysis dashboard](../analysis/) lists every one as a separate experiment with no extra setup.
+
+Compare scalar selection against Pareto selection on a task. Each arm writes to its own folder
+(`data/AND/` and `data/AND Pareto/`), so the dashboard's Compare page sets them side by side,
+including final hypervolume:
+
+```bash
+mo-neat-dnfs-evol --task and --runs 30 --pop 500 --gens 200 --target 0.9
+mo-neat-dnfs-evol --task and --ablation pareto-selection --runs 30 --pop 500 --gens 200 --target 0.9
+```
+
+Only one `--ablation` applies per run, so combining Pareto selection with another ablation
+(no crossover, say) needs its own preset file that sets both.
 
 Continue evolving inhibition-of-return from its checked-in template:
 

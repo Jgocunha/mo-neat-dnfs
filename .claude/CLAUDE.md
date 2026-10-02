@@ -82,6 +82,12 @@ phase, each opened as a PR against the previous phase's branch, so the PRs form 
 merge it upward into each branch above it - don't rebase, so no force-push is needed. PRs get
 Copilot code reviews.
 
+**A stack only reaches `main` if each PR is retargeted before it merges.** The repo does not
+delete head branches on merge, so GitHub never retargets the next PR. Merging the whole stack at
+once (2026-10-01) landed only phase 1 on `main`; phases 2-5 merged into the branches below them
+and needed a landing PR (#8). Merge bottom-up, retargeting each PR to `main` after the one below
+it merges, or turn on "Automatically delete head branches".
+
 Everything above is general engineering guidance. Everything below is specific to this
 repository and takes precedence where the two overlap.
 

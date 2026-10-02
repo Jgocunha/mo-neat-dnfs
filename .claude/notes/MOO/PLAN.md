@@ -897,3 +897,39 @@ al.), NEAT-MODS μ+λ selection, NSGA-III, and objective names in config (the da
 - `PopulationFileManager::saveSolutionPhenotype` was extracted from
   `saveAllSolutionsWithFitnessAbove` so that `pareto_front/` reuses it. The output of
   `best_solutions/last_generation/` is unchanged.
+
+### Phase 6 (branch `feat/pareto-preset`, PR against `main`)
+- **The stack had not reached `main`.** PRs #2–#4 and #7 merged into the branch below each one, so
+  `main` held only Phase 1. `feat/viz-pareto` carries phases 2–5 and goes to `main` as landing PR #8.
+  Phase 6 merges `origin/main` in and targets `main` directly, so after #8 its diff is Phase 6 only.
+- **The groups and presets are config only.** Each task's `config/solutions/<task>.json` carries its
+  §3.6 grouping, and `config/ablations/pareto-selection{,-no-floor}.json` are discovered by
+  `AblationPresets::names()` with no code change. The `--config` layer replaces only the reference,
+  so a user's config without a `SelectionConstants` block still gets the task's groups.
+- **Scalar runs' `objectives.jsonl` changes content.** It now holds the grouped objectives (and
+  records the groups) rather than one objective per partial. Selection, and every other file, are
+  unchanged.
+- **`ScopedTaskConfig` reloads the reference config on destruction**, which is stronger than the
+  `SelectionConstants::reset()` the Phase 2 notes asked for. Resetting the globals is not enough:
+  `ConfigLoader` keeps the merged *task* config as the base that `applyAblation` merges onto, so
+  the next ablation test brought AND's groups back and 4 fast tests threw. CTest hides this
+  because it runs each test in its own process; it shows when the test binary runs all tests in
+  one process (`mo-neat-dnfs-test.exe "~[Evolution]"`). A test section pins it.
+- **The slow test does not assert "archive non-empty on `and`"** (§5): whether a 50 × 10 run reaches
+  feasibility is up to the search, and `test_evolution_helpers.h` rules out stochastic assertions.
+  It asserts the deterministic equivalent instead: in every generation, the archive is non-empty
+  exactly when some generation so far had a feasible individual. The test also checks the ranks against `constrainedDominates`
+  in every generation. It does **not** assert §5's "best fitness never falls below its high-water
+  mark by more than `elitismFitnessEpsilon`". That failed on Linux CI (0.499 after 0.548): the
+  preserved elite is re-evaluated every generation, and `validateElitism` allows a larger drop
+  as long as the elite itself is still present. A clean validation report under the Throw
+  policy is the real elitism check. It runs with file output on and deletes each run directory, and
+  the empty `data/<Task> Pareto/` parent too, so the dashboard does not list a run-less experiment.
+- Tests: fast lane 265/265, slow lane 9/9 (both Pareto runs about 20–35 s).
+- CLI check, `--task and --ablation pareto-selection --runs 1 --pop 100 --gens 15`: groups
+  `[[0,2],[1,3,4],[5,6,7]]`, ε 0.01 and floor 0.1 are recorded; the first feasible solution appears
+  in generation 3 (1 of 100), with 34 of 100 feasible by generation 14; the archive holds one point
+  from generation 3 on; `pareto_front/` is empty because that member was gone by the end.
+- **Still open, for the user: `pareto_front/` is usually empty.** See the Phase 5 note. Keeping a
+  genome copy in `ParetoArchiveEntry` would fix it, but it changes what the archive stores, so it
+  was not done in Phase 6.
