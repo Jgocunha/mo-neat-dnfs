@@ -1250,11 +1250,6 @@ private:
     BumpFitnessWeights weights;
 };
 
-    }
-
-    void createPhenotypeEnvironment() override {}
-};
-
 // Stand-in that reports fixed partials and a fixed fitness with no fitness
 // weights or objective groups, so its objective vector is its partials. Used to
 // place solutions at chosen points of objective space for the Pareto-mode
@@ -1329,5 +1324,9 @@ private:
         const double economy = std::max(0.0, 1.0 - static_cast<double>(getNumConnectionGenes()) / 10.0);
         parameters.partialFitness = { growth, economy };
         parameters.fitness = 0.5 * (growth + economy);
+    }
+
+    void createPhenotypeEnvironment() override {}
+};
 
 } // namespace neat_dnfs::test
