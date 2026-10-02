@@ -102,7 +102,7 @@ mo-neat-dnfs/
 |   |-- neat/         connection_gene, field_gene, genome, population,
 |   |                 population_file_manager, solution, species
 |   |-- solutions/    task definitions - and, xor, dmts, ior, memory_trace,
-|   |                 detection/memory/selection_instability
+|   |                 detection/memory/selection_instability, hri_packaging_task
 |   |-- neat_tools/   logger.h utils.h key_listener.h ablation_presets.h
 |   |                 config_loader.h resource_paths.h solution_registry.h
 |   +-- constants.h

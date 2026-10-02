@@ -24,12 +24,12 @@ Every binary supports `--list` (print available tasks and ablations) and
 | `--runs N` | evol, inc-evol | Number of independent `Population::evolve()` runs | `SolutionConstants.numberRuns` from config |
 | `--pop N` | evol, inc-evol | Population size per run | `SolutionConstants.populationSize` from config |
 | `--gens N` | evol, inc-evol | Max generations per run | `SolutionConstants.numberGenerations` from config |
-| `--target F` | evol, inc-evol | Target fitness that ends a run early | `SolutionConstants.targetFitness` from config |
+| `--target F` | evol, inc-evol | Ends a run early once every partial fitness of the best solution exceeds F | `SolutionConstants.targetFitness` from config |
 | `--evals N` | sol-eval | Number of `evaluate()` calls | 20 |
 | `--config PATH` | all | Reference hyperparameter JSON | `config/mo_neat_dnfs.json` |
 
 Available tasks: `and`, `xor`, `detection-instability`, `memory-instability`,
-`selection-instability`, `memory-trace`, `dmts`, `ior`.
+`selection-instability`, `memory-trace`, `dmts`, `ior`, `hri-packaging`.
 
 Available ablations: `no-growth-io-only`, `no-growth-reference-hidden-field-count`,
 `no-speciation`, `no-crossover`, `random-initial-topology`.
@@ -56,7 +56,8 @@ Each `config/solutions/<task>.json` also sets `SelectionConstants.objectiveGroup
 partitions that task's partial fitnesses into the objectives Pareto selection ranks on (for
 `and`: input representation, output logic, return to rest). Scalar selection ignores them;
 they only shape `objectives.jsonl`. A grouping that is not a partition of the task's partials
-is a startup error.
+is a startup error. `hri-packaging` has no grouping yet, so each of its 7 partials is its own
+objective.
 
 Ablation presets live in `config/ablations/` and are the third layer, merged over the first
 two when `--ablation` is passed; adding a file adds a preset, with no code change. A preset

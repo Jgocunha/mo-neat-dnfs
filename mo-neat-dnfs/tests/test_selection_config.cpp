@@ -315,6 +315,9 @@ TEST_CASE("Every task config groups its partials into the planned objectives", "
         { "memory-trace", { { 0, 2 }, { 1, 3, 4 }, { 5, 6, 7 } } },
         { "dmts", { { 0, 2, 4 }, { 1, 3, 5 } } },
         { "ior", { { 0, 2 }, { 1, 3, 4 } } },
+        // Added by the neat-dnfs #120 sync; no grouping has been chosen yet, so
+        // each of its 7 partials is its own objective.
+        { "hri-packaging", {} },
     };
     REQUIRE(plannedGroups.size() == taskEntries().size());
 
