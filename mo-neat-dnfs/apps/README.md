@@ -52,6 +52,13 @@ and `saveParetoFront` may be omitted and fall back to their defaults (scalar sel
 flags true), so a `--config` file written before they existed keeps loading. A mistyped key inside
 `SelectionConstants` is still an error.
 
+`SelectionConstants` has three tolerances. `dominanceEpsilon` is the ε of the Pareto ranking.
+`archiveEpsilon` is the ε of the archives and of the improvement signals that drive
+stagnation; it absorbs re-evaluation noise, and when it is absent it takes `dominanceEpsilon`'s
+value. `violationEpsilon` makes two infeasible solutions whose total shortfall below
+`feasibilityFloor` differs by less than it compare on their objectives instead; 0 is Deb's
+exact rule.
+
 Each `config/solutions/<task>.json` also sets `SelectionConstants.objectiveGroups`, which
 partitions that task's partial fitnesses into the objectives Pareto selection ranks on (for
 `and`: input representation, output logic, return to rest). Scalar selection ignores them;

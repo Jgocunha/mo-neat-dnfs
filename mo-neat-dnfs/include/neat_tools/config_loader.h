@@ -23,6 +23,10 @@ namespace neat_dnfs
 	/// added after users had written their own full --config files, and those
 	/// files must keep loading unchanged. Because optional keys would hide a
 	/// typo, an unknown key inside SelectionConstants is still an error.
+	/// SelectionConstants.archiveEpsilon falls back to dominanceEpsilon rather
+	/// than to a fixed value, so it is left out of the reference config: listed
+	/// there, it would override that fallback for every preset that sets only
+	/// dominanceEpsilon.
 	///
 	/// config/mo_neat_dnfs.json is the complete reference set. A per-experiment
 	/// config under config/solutions/ is a *sparse* override of it: the two are
