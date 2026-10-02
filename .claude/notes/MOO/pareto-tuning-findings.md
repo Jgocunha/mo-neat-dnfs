@@ -56,3 +56,44 @@ XOR is unsolved by either mode at this budget: populations hold specialists for 
 1" and "fire on input 2", and the generalist needs an inhibitory hidden field, which the
 add-field mutation (probability 0.0005) rarely supplies. Memory trace: scalar's final populations
 are all feasible; in 3 of 5 V8 runs none is.
+
+## Round 4 and 5: offspring sharing and ranking epsilon
+
+- V10 (V8 plus `offspringAllocation: fitness`) brought memory trace back to comparable: a real
+  generalist (lowest partial 0.91) in 2/5 runs against scalar's 3/5 (p = 0.60).
+- Selection instability looked like a Pareto weakness at 5 runs per arm. At 15 runs it is not:
+  scalar 5/15, V10 2/15, **V11** (V10 plus dominance ε 0.01) 6/15. ε 0.01 absorbs re-evaluation
+  noise in the saturated second objective (f3/f4 near 1), and the fitness tie-break decides
+  among the ε-ties. V11 became the shipped `pareto-selection` preset.
+
+## Final comparison (shipped preset against scalar)
+
+Every task but hri-packaging. 12 runs per arm, pop 100, 100 generations, target 0.95 on every
+partial, binary at `29c9f06`. The runs are in `mo-neat-dnfs/data/<Task>` and
+`mo-neat-dnfs/data/<Task> Pareto`, and the dashboard's Scalar vs Pareto page shows them. "Gens"
+is the median generation of success among the runs that succeeded.
+
+| Task | scalar success | Pareto success | Fisher p | best's lowest partial (median) | final best fitness (median) | verdict |
+|---|---|---|---|---|---|---|
+| AND | 3/12 (gens 30) | **7/12** (gens 51) | 0.21 | 0.920 vs **0.952** | 0.983 vs 0.984 | comparable |
+| Detection instability | 12/12 (gens 4) | 12/12 (gens 2) | 1.00 | 0.956 vs 0.957 | 0.980 vs 0.978 | comparable |
+| Memory instability | 9/12 (gens 12) | 7/12 (gens 9) | 0.67 | 0.956 vs 0.953 | 0.977 vs 0.978 | comparable |
+| Memory trace | 0/12 | 0/12 | 1.00 | 0.000 vs 0.000 | 0.839 vs 0.785 (p = 0.45) | comparable |
+| Selection instability | 7/12 (gens 68) | 5/12 (gens 20) | 0.68 | 0.951 vs 0.932 | 0.985 vs 0.981 (p = 0.08) | comparable |
+| XOR | 4/12 (gens 53) | 4/12 (gens 82) | 1.00 | 0.170 vs **0.455** | 0.771 vs **0.858** | comparable |
+
+- **No task differs significantly at α = 0.05** (Fisher's exact test on success; Mann–Whitney U on
+  the best generalist, the final best fitness and the feasible hypervolume, all p > 0.05).
+- Pareto leads on the tasks with several conflicting scenarios: AND (58% against 25% success)
+  and XOR (lowest partial 0.46 against 0.17, fitness 0.86 against 0.77). Scalar leads slightly on
+  the single-behaviour instability tasks and on memory trace's final fitness. None of the leads
+  is significant with 12 runs; 30 runs per arm would be needed to tell them apart.
+- Memory trace is unsolved by both at this budget, so neither mode's comparison says much there.
+
+## What the tuned preset is, and is not
+
+With the shipped preset, Pareto mode keeps scalar mode's stagnation rules and between-species
+offspring sharing. It differs in which members survive pruning, which member is a species'
+champion, which crossover parent is the fitter one, and in the floor that ranks every solution
+with a near-zero partial behind every complete one. The front-based signals of §3.3 are still
+there, off by default, for further experiments.
