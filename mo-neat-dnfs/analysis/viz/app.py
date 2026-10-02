@@ -3,7 +3,7 @@ import streamlit as st
 
 from . import theme
 from .parsing import find_experiment_dirs, find_runs_with_overview, load_overview, run_picker_label
-from .views import render_cross_experiment_view, render_experiment_view, render_fitness_view, render_mutations_view, render_pareto_view, render_provenance_view, render_species_view, render_topology_view
+from .views import render_cross_experiment_view, render_experiment_view, render_fitness_view, render_mutations_view, render_pareto_view, render_provenance_view, render_scalar_vs_pareto_view, render_species_view, render_topology_view
 from .report import export_experiment_markdown, export_run_markdown
 
 _ANALYSIS_DIR = Path(__file__).resolve().parents[1]
@@ -15,7 +15,7 @@ _ANALYSIS_DIR = Path(__file__).resolve().parents[1]
 _SCOPE_RUN = {"Fitness", "Species", "Topology", "Mutations", "Pareto", "Provenance"}
 _SCOPE_EXPERIMENT = {"Experiment"}
 
-# icon + one-line tagline per page, shown as the page header so each of the 8 pages reads as
+# icon + one-line tagline per page, shown as the page header so each of the 9 pages reads as
 # its own place rather than an unlabeled continuation of the same screen.
 _PAGE_TAGLINES = {
     "Fitness": (":material/trending_up:", "Best and average fitness against your target, generation by generation."),
@@ -25,6 +25,7 @@ _PAGE_TAGLINES = {
     "Pareto": (":material/scatter_plot:", "Trade-offs between objectives: the fronts, who sits on them, and how they move."),
     "Experiment": (":material/science:", "Every run in this experiment, aggregated into one convergence picture."),
     "Compare": (":material/compare_arrows:", "Several experiments side by side -- what actually moved the needle."),
+    "Scalar vs Pareto": (":material/balance:", "Every task's weighted-sum search against its multi-objective one, with a verdict."),
     "Provenance": (":material/fingerprint:", "What built this run, and the machine it ran on."),
 }
 
@@ -74,6 +75,10 @@ def _page_experiment():
 
 def _page_compare():
     render_cross_experiment_view(st.session_state["data_root"])
+
+
+def _page_scalar_vs_pareto():
+    render_scalar_vs_pareto_view(st.session_state["data_root"])
 
 
 def _inject_css() -> None:
@@ -133,6 +138,7 @@ def main():
             "Across runs": [
                 st.Page(_page_experiment, title="Experiment", icon=":material/science:"),
                 st.Page(_page_compare, title="Compare", icon=":material/compare_arrows:"),
+                st.Page(_page_scalar_vs_pareto, title="Scalar vs Pareto", icon=":material/balance:"),
             ],
             "Run context": [
                 st.Page(_page_provenance, title="Provenance", icon=":material/fingerprint:"),

@@ -13,6 +13,8 @@ from .parsing import _sample_evenly, compute_mutation_events, compute_partial_fi
 from .experiment import _load_experiment_runs_parsed, compute_experiment_convergence, compute_experiment_totals, compute_partial_fitness_best_only
 from .solution_record import parse_solution_blob
 from .pareto import constraint_violation, correlation_long, format_groups, generation_metrics, non_dominated_sort, numbered_columns, parse_groups, space_for_rows, staircase_2d, summarize_generation, validate_partition
+from .moo_compare import SCALAR_ARM, arm_table, best_trajectory, pair_experiments, run_summary, trajectory_band
+from .plots import chart_arm_final_values, chart_arm_success, chart_arm_trajectories
 from .theme import theme_type
 
 def _clamp(v: float, lo: float, hi: float) -> float:
@@ -2249,3 +2251,164 @@ def render_cross_experiment_pareto(selected_names: list[str], experiment_paths: 
         rows.append({"experiment": name, "n": len(vals), "U": u, "p-value": p})
     st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
     st.caption(f"Final hypervolume vs. **{reference_name}**. Normal-approximation p-value; indicative only for small n.")
+
+
+# ---------------------------------------------------------------------------------------------
+# Scalar vs Pareto page
+# ---------------------------------------------------------------------------------------------
+
+_VERDICT_BADGES = {
+    "better": (":material/arrow_upward:", "green"),
+    "comparable": (":material/drag_handle:", "gray"),
+    "mixed": (":material/swap_vert:", "orange"),
+    "worse": (":material/arrow_downward:", "red"),
+}
+
+
+def _file_stamp(path: Path) -> float:
+    return path.stat().st_mtime if path.exists() else 0.0
+
+
+@st.cache_data(show_spinner=False)
+def _cached_run_summary(run_path: str, target: float, overview_stamp: float, objectives_stamp: float):
+    return run_summary(Path(run_path), target)
+
+
+@st.cache_data(show_spinner=False)
+def _cached_best_trajectory(run_path: str, overview_stamp: float) -> pd.DataFrame:
+    return best_trajectory(Path(run_path))
+
+
+def _arm_runs(experiment_path: Path, target: float) -> list[tuple[str, Path, dict]]:
+    runs = []
+    for name, path in find_runs_with_overview(experiment_path):
+        summary = _cached_run_summary(str(path), target, _file_stamp(path / "overview.jsonl"),
+                                      _file_stamp(path / "objectives.jsonl"))
+        if summary is not None:
+            runs.append((name, path, summary))
+    return runs
+
+
+def _render_verdict_badges(tables: dict[str, pd.DataFrame]) -> None:
+    columns = st.columns(min(len(tables), 3))
+    for index, (task, table) in enumerate(tables.items()):
+        scalar = table[table["arm"] == SCALAR_ARM].iloc[0]
+        with columns[index % len(columns)]:
+            st.markdown(f"**{task}**")
+            for _, row in table[table["arm"] != SCALAR_ARM].iterrows():
+                icon, color = _VERDICT_BADGES[row["verdict"]]
+                st.badge(f"{row['arm']}: {row['verdict']}", icon=icon, color=color)
+                st.caption(
+                    f"success {row['success rate']:.0%} vs {scalar['success rate']:.0%} scalar, "
+                    f"best generalist {row['best generalist']:.3f} vs {scalar['best generalist']:.3f}"
+                )
+
+
+def _collect_scalar_vs_pareto(tasks: dict, selected: list[str], experiments: dict, target: float) -> dict:
+    """Per-run summaries and per-generation bands for every selected task and arm."""
+    collected = {"tables": {}, "success": [], "finals": [], "fitness_bands": [], "partial_bands": []}
+    for task in selected:
+        runs_by_arm = {}
+        for arm, experiment_name in tasks[task].items():
+            runs = _arm_runs(experiments[experiment_name], target)
+            if not runs:
+                continue
+            runs_by_arm[arm] = [summary for _, _, summary in runs]
+            successes = sum(summary["success"] for _, _, summary in runs)
+            collected["success"].append({"task": task, "arm": arm, "success_rate": successes / len(runs),
+                                         "label": f"{successes}/{len(runs)}"})
+            collected["finals"].extend({"task": task, "arm": arm, "run": name, **summary} for name, _, summary in runs)
+            trajectories = [_cached_best_trajectory(str(path), _file_stamp(path / "overview.jsonl")) for _, path, _ in runs]
+            collected["fitness_bands"].append(trajectory_band(trajectories, "best_fitness").assign(task=task, arm=arm))
+            collected["partial_bands"].append(trajectory_band(trajectories, "best_min_partial").assign(task=task, arm=arm))
+        if SCALAR_ARM in runs_by_arm and len(runs_by_arm) > 1:
+            collected["tables"][task] = arm_table(runs_by_arm)
+    return collected
+
+
+def _render_per_task_tables(tables: dict[str, pd.DataFrame]) -> None:
+    for task, table in tables.items():
+        st.markdown(f"**{task}**")
+        st.dataframe(
+            table,
+            hide_index=True,
+            width="stretch",
+            column_config={
+                "success rate": st.column_config.NumberColumn(format="percent"),
+                "median generations to success": st.column_config.NumberColumn(format="%.1f"),
+                "final best fitness": st.column_config.NumberColumn(format="%.3f"),
+                "best's lowest partial": st.column_config.NumberColumn(format="%.3f"),
+                "best generalist": st.column_config.NumberColumn(format="%.3f"),
+                "feasible hypervolume": st.column_config.NumberColumn(format="%.3f"),
+            },
+        )
+
+
+def render_scalar_vs_pareto_view(data_root_str: str):
+    """Every task's scalar experiment against its Pareto arm(s): did multi-objective selection
+    find complete solutions more often, and how did the search get there?"""
+    st.caption(
+        "Pairs each task's scalar experiment (for example `AND`) with the experiments named after it "
+        "(`AND Pareto`). A run **succeeds** when its best solution scores above the target on *every* "
+        "partial fitness: the same rule that ends evolution early."
+    )
+    experiments = dict(find_experiment_dirs(Path(data_root_str).expanduser()))
+    tasks = pair_experiments(list(experiments))
+    if not tasks:
+        st.info("No task here has both a scalar experiment and a Pareto one (for example `AND` and `AND Pareto`).")
+        return
+
+    col_tasks, col_target = st.columns([3, 1])
+    selected = col_tasks.multiselect("Tasks", list(tasks), default=list(tasks), key="svp_tasks")
+    target = col_target.number_input("Target (every partial)", 0.0, 1.0, 0.95, 0.01, key="svp_target")
+    if not selected:
+        return
+
+    arms = [SCALAR_ARM] + sorted({arm for task in selected for arm in tasks[task]} - {SCALAR_ARM})
+    with st.spinner("Reading every run..."):
+        collected = _collect_scalar_vs_pareto(tasks, selected, experiments, target)
+    if not collected["tables"]:
+        st.info("The selected tasks have no runs with `overview.jsonl` and `objectives.jsonl` in both arms.")
+        return
+
+    st.markdown("### Verdict")
+    _render_verdict_badges(collected["tables"])
+    with st.expander("How the verdict is decided", expanded=False):
+        st.markdown(
+            "At α = 0.05: first the success rate (Fisher's exact test). If it does not differ significantly, "
+            "the **best generalist** (the highest *lowest partial* in the final population: the best worst-case "
+            "behaviour any solution reached) and the **final best fitness** (Mann-Whitney U). **better** / "
+            "**worse**: significant in one direction only; **mixed**: significant both ways; **comparable**: "
+            "no significant difference. With a handful of runs per arm, read *comparable* as *not shown "
+            "to differ*."
+        )
+
+    st.divider()
+    st.altair_chart(chart_arm_success(pd.DataFrame(collected["success"]), arms), width="stretch")
+
+    st.divider()
+    st.markdown("### How the best solution evolved")
+    st.caption(
+        "Median across runs (line) and interquartile range (band). The weighted fitness is what scalar "
+        "selection maximises. The lowest partial is the scenario the best solution handles worst: a "
+        "specialist scores high on fitness while one partial stays near 0. A run that met the target "
+        "keeps its final value."
+    )
+    st.altair_chart(chart_arm_trajectories(pd.concat(collected["partial_bands"], ignore_index=True), arms,
+                                           "Lowest partial of the best solution", "lowest partial", target), width="content")
+    st.altair_chart(chart_arm_trajectories(pd.concat(collected["fitness_bands"], ignore_index=True), arms,
+                                           "Weighted fitness of the best solution", "fitness"), width="content")
+
+    st.divider()
+    st.markdown("### Final population")
+    finals = pd.DataFrame(collected["finals"])
+    st.altair_chart(chart_arm_final_values(finals, arms, "best_generalist", "Best generalist (highest lowest partial)"),
+                    width="content")
+    st.altair_chart(chart_arm_final_values(finals, arms, "feasible_hv", "Hypervolume of the feasible front"),
+                    width="content")
+    st.caption("Feasible: every partial at or above 0.1. Hypervolume is measured in each task's grouped "
+               "objective space (exact for up to 3 objectives).")
+
+    st.divider()
+    st.markdown("### Per-task numbers")
+    _render_per_task_tables(collected["tables"])
