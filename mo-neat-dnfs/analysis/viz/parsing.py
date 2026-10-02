@@ -675,6 +675,10 @@ def load_objectives(run_dir_str: str) -> RecordedObjectives | None:
                 settings = {
                     "mode": record["mode"],
                     "epsilon": record["epsilon"],
+                    # Absent before the tolerances were split: the archive then used epsilon,
+                    # and violations were compared exactly.
+                    "archive_epsilon": record.get("archiveEpsilon", record["epsilon"]),
+                    "violation_epsilon": record.get("violationEpsilon", 0.0),
                     "feasibility_floor": record["feasibilityFloor"],
                     "objective_groups": record["objectiveGroups"],
                 }

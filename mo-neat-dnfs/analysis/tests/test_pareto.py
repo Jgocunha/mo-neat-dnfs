@@ -71,6 +71,20 @@ def test_non_dominated_sort_ranks_feasible_ahead_of_infeasible():
     assert non_dominated_sort(points, violations=violations).tolist() == [0, 2, 0, 1]
 
 
+def test_non_dominated_sort_orders_near_equal_violations_by_objectives():
+    # The C++ case in tests/test_pareto.cpp: violations 0.1 and 0.1002 tie within 0.01.
+    objectives = [[0.2, 0.2], [0.9, 0.9], [0.5, 0.5]]
+    violations = [0.1, 0.1002, 0.3]
+    assert non_dominated_sort(objectives, 0.0, violations).tolist() == [0, 1, 2]
+    assert non_dominated_sort(objectives, 0.0, violations, violation_epsilon=0.01).tolist() == [1, 0, 2]
+
+
+def test_violation_tie_band_never_lets_an_infeasible_point_beat_a_feasible_one():
+    objectives = [[0.1, 0.1], [1.0, 1.0]]
+    violations = [0.0, 0.001]
+    assert non_dominated_sort(objectives, 0.0, violations, violation_epsilon=0.01).tolist() == [0, 1]
+
+
 def test_non_dominated_sort_assigns_every_point_when_epsilon_dominance_is_cyclic():
     # Same cycle as the C++ test: with epsilon 0.1, a > b > c > a.
     points = [[0.25, 0.18, 0.10], [0.10, 0.25, 0.18], [0.18, 0.10, 0.25]]

@@ -23,15 +23,19 @@ namespace neat_dnfs
     /// @return True if @p a dominates @p b. Equal vectors never dominate each other.
     [[nodiscard]] bool dominates(std::span<const double> a, std::span<const double> b, double epsilon);
 
-    /// @brief Constrained-domination (Deb 2002, section V).
-    /// @details A feasible point (violation 0) beats an infeasible one; between two
-    /// infeasible points the smaller violation wins; between two feasible points
-    /// dominates() decides. With every violation at 0 this is exactly dominates().
+    /// @brief Constrained-domination (Deb 2002, section V), with an optional tie band.
+    /// @details A feasible point (violation 0) beats an infeasible one. Between two
+    /// infeasible points the smaller violation wins, unless the two violations differ by
+    /// less than @p violationEpsilon: then dominates() decides, as between two feasible
+    /// points. With every violation at 0 this is exactly dominates().
     /// @param a The candidate dominator.
     /// @param b The candidate dominated point.
-    /// @param epsilon Tolerance passed to dominates() when both points are feasible.
+    /// @param epsilon Tolerance passed to dominates().
+    /// @param violationEpsilon Violations closer than this count as equal; 0 (the
+    /// default) is Deb's exact rule.
     /// @return True if @p a constrained-dominates @p b.
-    [[nodiscard]] bool constrainedDominates(const RankedPoint& a, const RankedPoint& b, double epsilon);
+    [[nodiscard]] bool constrainedDominates(const RankedPoint& a, const RankedPoint& b, double epsilon,
+        double violationEpsilon = 0.0);
 
     /// @brief Total shortfall of the partial fitnesses below a feasibility floor.
     /// @param partials Raw partial fitness values.
@@ -46,8 +50,10 @@ namespace neat_dnfs
     /// fewest other remaining points form the next front, so the sort always terminates.
     /// @param points The population to rank.
     /// @param epsilon Dominance tolerance passed to constrainedDominates().
+    /// @param violationEpsilon Violation tie band passed to constrainedDominates().
     /// @return Fronts as lists of indices into @p points, front 0 (the non-dominated set) first.
-    [[nodiscard]] std::vector<std::vector<size_t>> nonDominatedSort(std::span<const RankedPoint> points, double epsilon);
+    [[nodiscard]] std::vector<std::vector<size_t>> nonDominatedSort(std::span<const RankedPoint> points, double epsilon,
+        double violationEpsilon = 0.0);
 
     /// @brief NSGA-II crowding distance of the members of one front.
     /// @details Per objective, the members are ordered by value; the first and last get

@@ -672,7 +672,10 @@ def test_load_objectives_reads_settings_individuals_and_archive(tmp_path):
 
     loaded = load_objectives(str(run_dir))
 
-    assert loaded.settings == {"mode": "pareto", "epsilon": 0.01, "feasibility_floor": 0.1, "objective_groups": [[0, 2], [1]]}
+    assert loaded.settings == {
+        "mode": "pareto", "epsilon": 0.01, "archive_epsilon": 0.01, "violation_epsilon": 0.0,
+        "feasibility_floor": 0.1, "objective_groups": [[0, 2], [1]],
+    }
     individuals = loaded.individuals
     assert list(individuals.columns) == [
         "generation", "id", "species", "fitness", "p1", "p2", "p3", "o1", "o2", "rank", "crowding", "violation"
@@ -684,6 +687,18 @@ def test_load_objectives_reads_settings_individuals_and_archive(tmp_path):
         {"generation": 0, "size": 1, "accepted": 1},
         {"generation": 1, "size": 1, "accepted": 1},
     ]
+
+
+def test_load_objectives_reads_the_archive_and_violation_tolerances(tmp_path):
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    record = _objectives_record(0, [_objectives_individual(1, [0.2, 0.4, 0.6], [0.4, 0.4], 0, None)], 1, [1])
+    record.update({"epsilon": 0.0, "archiveEpsilon": 0.02, "violationEpsilon": 0.03})
+    (run_dir / "objectives.jsonl").write_text(json.dumps(record) + "\n")
+
+    settings = load_objectives(str(run_dir)).settings
+
+    assert (settings["epsilon"], settings["archive_epsilon"], settings["violation_epsilon"]) == (0.0, 0.02, 0.03)
 
 
 def test_load_objectives_returns_none_without_the_file(tmp_path):

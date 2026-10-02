@@ -324,6 +324,14 @@ namespace neat_dnfs
 		inline static double dominanceEpsilon = 0.0;
 		inline static double feasibilityFloor = 0.0;
 		inline static size_t archiveCapacity = 100;
+		// Tolerance for the archives and the improvement signals they drive, kept
+		// apart from the ranking's dominanceEpsilon so ranking can be exact while
+		// re-evaluation noise still cannot churn the archives. A config that omits
+		// it gets dominanceEpsilon's value.
+		inline static double archiveEpsilon = 0.0;
+		// Two infeasible solutions whose violations differ by less than this are
+		// compared by their objectives instead; 0 is Deb's exact rule.
+		inline static double violationEpsilon = 0.0;
 
 		/// @brief Restores every field to its compiled-in default.
 		static void reset()
@@ -333,6 +341,8 @@ namespace neat_dnfs
 			dominanceEpsilon = 0.0;
 			feasibilityFloor = 0.0;
 			archiveCapacity = 100;
+			archiveEpsilon = 0.0;
+			violationEpsilon = 0.0;
 		}
 	};
 

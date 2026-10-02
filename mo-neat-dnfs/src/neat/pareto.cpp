@@ -59,7 +59,8 @@ namespace neat_dnfs
 
         /// One pass over every pair (O(m N^2)), the input of the front-peeling loop in
         /// nonDominatedSort().
-        DominationGraph buildDominationGraph(std::span<const RankedPoint> points, const double epsilon)
+        DominationGraph buildDominationGraph(std::span<const RankedPoint> points, const double epsilon,
+            const double violationEpsilon)
         {
             const size_t count = points.size();
             DominationGraph graph{ std::vector<std::vector<size_t>>(count), std::vector<size_t>(count, 0) };
@@ -67,12 +68,12 @@ namespace neat_dnfs
             {
                 for (size_t j = i + 1; j < count; ++j)
                 {
-                    if (constrainedDominates(points[i], points[j], epsilon))
+                    if (constrainedDominates(points[i], points[j], epsilon, violationEpsilon))
                     {
                         graph.dominatedBy[i].push_back(j);
                         ++graph.dominationCount[j];
                     }
-                    else if (constrainedDominates(points[j], points[i], epsilon))
+                    else if (constrainedDominates(points[j], points[i], epsilon, violationEpsilon))
                     {
                         graph.dominatedBy[j].push_back(i);
                         ++graph.dominationCount[i];
@@ -132,7 +133,8 @@ namespace neat_dnfs
         return strictlyBetterSomewhere;
     }
 
-    bool constrainedDominates(const RankedPoint& a, const RankedPoint& b, const double epsilon)
+    bool constrainedDominates(const RankedPoint& a, const RankedPoint& b, const double epsilon,
+        const double violationEpsilon)
     {
         const bool aFeasible = isFeasible(a);
         const bool bFeasible = isFeasible(b);
@@ -143,6 +145,10 @@ namespace neat_dnfs
         if (aFeasible != bFeasible)
         {
             return aFeasible;
+        }
+        if (std::abs(a.violation - b.violation) < violationEpsilon)
+        {
+            return dominates(a.objectives, b.objectives, epsilon);
         }
         return a.violation < b.violation;
     }
@@ -159,9 +165,10 @@ namespace neat_dnfs
             });
     }
 
-    std::vector<std::vector<size_t>> nonDominatedSort(std::span<const RankedPoint> points, const double epsilon)
+    std::vector<std::vector<size_t>> nonDominatedSort(std::span<const RankedPoint> points, const double epsilon,
+        const double violationEpsilon)
     {
-        auto [dominatedBy, dominationCount] = buildDominationGraph(points, epsilon);
+        auto [dominatedBy, dominationCount] = buildDominationGraph(points, epsilon, violationEpsilon);
         auto remaining = indicesUpTo(points.size());
         std::vector<std::vector<size_t>> fronts;
 

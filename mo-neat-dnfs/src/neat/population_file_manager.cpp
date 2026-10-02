@@ -52,10 +52,6 @@ namespace neat_dnfs
 		{
 			saveObjectivesForGeneration();
 		}
-		if (SelectionConstants::mode == SelectionMode::Pareto && PopulationConstants::saveParetoFront)
-		{
-			saveParetoFrontForGeneration();
-		}
 	}
 
 	void PopulationFileManager::savePerGenerationData() const
@@ -79,6 +75,10 @@ namespace neat_dnfs
 		if (PopulationConstants::saveSpecies)
 		{
 			savePerGenerationSpecies();
+		}
+		if (SelectionConstants::mode == SelectionMode::Pareto && PopulationConstants::saveParetoFront)
+		{
+			saveParetoFrontForGeneration();
 		}
 	}
 
@@ -533,6 +533,8 @@ namespace neat_dnfs
 			{"generation", population->parameters.currentGeneration},
 			{"mode", selectionModeName(SelectionConstants::mode)},
 			{"epsilon", SelectionConstants::dominanceEpsilon},
+			{"archiveEpsilon", SelectionConstants::archiveEpsilon},
+			{"violationEpsilon", SelectionConstants::violationEpsilon},
 			{"feasibilityFloor", SelectionConstants::feasibilityFloor},
 			{"objectiveGroups", SelectionConstants::objectiveGroups},
 			{"individuals", individuals},
@@ -602,6 +604,8 @@ namespace neat_dnfs
 		const nlohmann::json record = {
 			{"mode", selectionModeName(SelectionConstants::mode)},
 			{"epsilon", SelectionConstants::dominanceEpsilon},
+			{"archiveEpsilon", SelectionConstants::archiveEpsilon},
+			{"violationEpsilon", SelectionConstants::violationEpsilon},
 			{"feasibilityFloor", SelectionConstants::feasibilityFloor},
 			{"objectiveGroups", SelectionConstants::objectiveGroups},
 			{"members", members}

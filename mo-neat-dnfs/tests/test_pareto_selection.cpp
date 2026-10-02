@@ -35,6 +35,7 @@ namespace
             SelectionConstants::mode = SelectionMode::Pareto;
             SelectionConstants::feasibilityFloor = floor;
             SelectionConstants::dominanceEpsilon = epsilon;
+            SelectionConstants::archiveEpsilon = epsilon;
         }
         ~ScopedParetoSelection() { SelectionConstants::reset(); }
         ScopedParetoSelection(const ScopedParetoSelection&) = delete;
@@ -495,42 +496,84 @@ TEST_CASE("Pareto-mode improvement falls back to the lowest violation while noth
     REQUIRE(PopulationTestAccess::archiveSize(*population) == 0);
 }
 
-TEST_CASE("Pareto-mode species improvement follows the accepted solutions' current species", "[ParetoSelection]")
+TEST_CASE("Pareto-mode species improvement is a member entering the species' own front", "[ParetoSelection]")
 {
     const ScopedParetoSelection pareto;
-    const auto population = populationAt({ { 0.9, 0.9 }, { 0.1, 0.1 } });
+    const auto population = populationAt({ { 0.9, 0.9 }, { 0.5, 0.5 }, { 0.6, 0.4 } });
     const auto solutions = population->getSolutions();
-    const auto accepted = solutions[0];
-    const auto dominated = solutions[1];
-    Species acceptedSpecies;
-    Species otherSpecies;
-    // The archive entry would carry this stale id; the signal must not trust it.
-    accepted->setSpeciesId(otherSpecies.getId());
-
+    Species leader;
+    Species follower;
+    leader.addSolution(solutions[0]);
+    follower.addSolution(solutions[1]);
     PopulationTestAccess::rankObjectives(*population);
-    acceptedSpecies.addSolution(accepted);
-    otherSpecies.addSolution(dominated);
 
-    REQUIRE(PopulationTestAccess::hasSpeciesImprovedOnTheFront(*population, acceptedSpecies));
-    REQUIRE_FALSE(PopulationTestAccess::hasSpeciesImprovedOnTheFront(*population, otherSpecies));
+    REQUIRE(PopulationTestAccess::offerSpeciesToItsFront(*population, leader));
+    REQUIRE(PopulationTestAccess::offerSpeciesToItsFront(*population, follower));
+    REQUIRE_FALSE(PopulationTestAccess::offerSpeciesToItsFront(*population, leader));
+    REQUIRE_FALSE(PopulationTestAccess::offerSpeciesToItsFront(*population, follower));
+
+    // (0.6, 0.4) trades off against the follower's own (0.5, 0.5), so the follower
+    // improves even though (0.9, 0.9), in another species, dominates both.
+    follower.addSolution(solutions[2]);
+    REQUIRE(PopulationTestAccess::offerSpeciesToItsFront(*population, follower));
 }
 
-TEST_CASE("Pareto-mode species improvement falls back to holding the new lowest violation", "[ParetoSelection]")
+TEST_CASE("Pareto-mode species improvement falls back to the species' own lowest violation", "[ParetoSelection]")
 {
-    const ScopedParetoSelection pareto(0.9);
-    const auto population = populationAt({ { 0.5, 0.5 }, { 0.2, 0.2 } });
+    // Floor 0.9: every point is infeasible. Shortfalls: 0.8, 0.78 and 0.6.
+    const ScopedParetoSelection pareto(0.9, 0.05);
+    const auto population = populationAt({ { 0.5, 0.5 }, { 0.51, 0.51 }, { 0.6, 0.6 } });
     const auto solutions = population->getSolutions();
-    Species leastViolating;
-    Species mostViolating;
-    leastViolating.addSolution(solutions[0]);
-    mostViolating.addSolution(solutions[1]);
+    Species species;
+    species.addSolution(solutions[0]);
+    PopulationTestAccess::rankObjectives(*population);
+
+    REQUIRE(PopulationTestAccess::offerSpeciesToItsFront(*population, species));
+    REQUIRE_FALSE(PopulationTestAccess::offerSpeciesToItsFront(*population, species));
+
+    species.addSolution(solutions[1]);
+    REQUIRE_FALSE(PopulationTestAccess::offerSpeciesToItsFront(*population, species));
+
+    species.addSolution(solutions[2]);
+    REQUIRE(PopulationTestAccess::offerSpeciesToItsFront(*population, species));
+}
+
+TEST_CASE("Pareto-mode archive uses archiveEpsilon, not the ranking epsilon", "[ParetoSelection]")
+{
+    const ScopedParetoSelection pareto;
+    SelectionConstants::archiveEpsilon = 0.05;
+    const auto population = populationAt({ { 0.5, 0.5 }, { 0.1, 0.1 } });
+    PopulationTestAccess::rankObjectives(*population);
+    REQUIRE(PopulationTestAccess::archiveSize(*population) == 1);
+
+    // Better on both objectives, but by less than archiveEpsilon.
+    moveSolutionTo(*population, 1, { 0.52, 0.53 });
+    PopulationTestAccess::rankObjectives(*population);
+
+    REQUIRE_FALSE(PopulationTestAccess::hasParetoFrontImproved(*population));
+    REQUIRE(PopulationTestAccess::archiveSize(*population) == 1);
+    const auto solutions = population->getSolutions();
+    REQUIRE(solutions[1]->getParameters().paretoRank == 0);
+    REQUIRE(solutions[0]->getParameters().paretoRank == 1);
+}
+
+TEST_CASE("Pareto-mode ranking treats violations within violationEpsilon as equal", "[ParetoSelection]")
+{
+    // Floor 0.9: shortfalls 0.91 and 0.9, and neither point dominates the other.
+    const ScopedParetoSelection pareto(0.9);
+    const auto population = populationAt({ { 0.89, 0.0 }, { 0.0, 0.9 } });
+    const auto solutions = population->getSolutions();
 
     PopulationTestAccess::rankObjectives(*population);
-    REQUIRE(PopulationTestAccess::hasSpeciesImprovedOnTheFront(*population, leastViolating));
-    REQUIRE_FALSE(PopulationTestAccess::hasSpeciesImprovedOnTheFront(*population, mostViolating));
+    REQUIRE(solutions[0]->getParameters().paretoRank == 1);
+    REQUIRE(solutions[1]->getParameters().paretoRank == 0);
+    REQUIRE_FALSE(solutions[0]->isEquivalentForSelection(*solutions[1]));
 
+    SelectionConstants::violationEpsilon = 0.05;
     PopulationTestAccess::rankObjectives(*population);
-    REQUIRE_FALSE(PopulationTestAccess::hasSpeciesImprovedOnTheFront(*population, leastViolating));
+    REQUIRE(solutions[0]->getParameters().paretoRank == 0);
+    REQUIRE(solutions[1]->getParameters().paretoRank == 0);
+    REQUIRE(solutions[0]->isEquivalentForSelection(*solutions[1]));
 }
 
 // --- integration ------------------------------------------------------------------
@@ -672,7 +715,8 @@ namespace
     }
 
     // Every generation saves the archive members in its population, so each
-    // member's phenotype is on disk under the generation that found it.
+    // member's phenotype is on disk under the generation that found it. The folder
+    // is numbered like solutions/gen M: one more than objectives.jsonl's generation.
     void requireEveryGenerationsFrontSaved(const std::vector<nlohmann::json>& records,
         const nlohmann::json& archive, const std::string& runDirectory)
     {
@@ -680,17 +724,17 @@ namespace
         {
             const int generationFound = member.at("generationFound").get<int>();
             INFO("member " << member.at("id") << " found in generation " << generationFound);
-            REQUIRE(holdsPhenotypeOf(frontDirectoryOf(runDirectory, generationFound),
-                member.at("id").get<int>(), generationFound));
+            REQUIRE(holdsPhenotypeOf(frontDirectoryOf(runDirectory, generationFound + 1),
+                member.at("id").get<int>(), generationFound + 1));
         }
         for (const auto& record : records)
         {
             const int generation = record.at("generation").get<int>();
             INFO("generation " << generation);
-            const auto directory = frontDirectoryOf(runDirectory, generation);
+            const auto directory = frontDirectoryOf(runDirectory, generation + 1);
             for (const auto& id : record.at("archive").at("acceptedThisGeneration"))
             {
-                REQUIRE(holdsPhenotypeOf(directory, id.get<int>(), generation));
+                REQUIRE(holdsPhenotypeOf(directory, id.get<int>(), generation + 1));
             }
             const auto archiveSize = record.at("archive").at("size").get<size_t>();
             REQUIRE((std::filesystem::exists(directory) ? fileCount(directory) : 0) <= archiveSize);

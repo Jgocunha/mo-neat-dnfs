@@ -668,7 +668,9 @@ namespace neat_dnfs
 		const RankedPoint self{ parameters.objectives, parameters.constraintViolation };
 		const RankedPoint peer{ other.parameters.objectives, other.parameters.constraintViolation };
 		const double epsilon = SelectionConstants::dominanceEpsilon;
-		return !constrainedDominates(self, peer, epsilon) && !constrainedDominates(peer, self, epsilon);
+		const double violationEpsilon = SelectionConstants::violationEpsilon;
+		return !constrainedDominates(self, peer, epsilon, violationEpsilon)
+			&& !constrainedDominates(peer, self, epsilon, violationEpsilon);
 	}
 
 	void Solution::addFieldGene(const FieldGene& gene)

@@ -8,6 +8,7 @@
 #include <atomic>
 #include <thread>
 #include <cmath>
+#include <limits>
 #include <ranges>
 
 namespace neat_dnfs
@@ -227,7 +228,7 @@ namespace neat_dnfs
 				constraintViolation(solutionParameters.partialFitness, SelectionConstants::feasibilityFloor) });
 		}
 
-		const auto fronts = nonDominatedSort(points, SelectionConstants::dominanceEpsilon);
+		const auto fronts = nonDominatedSort(points, SelectionConstants::dominanceEpsilon, SelectionConstants::violationEpsilon);
 		const auto numberOfFronts = static_cast<double>(fronts.size());
 		for (size_t rank = 0; rank < fronts.size(); ++rank)
 		{
@@ -253,7 +254,7 @@ namespace neat_dnfs
 			const ParetoArchiveEntry entry{ solution->getId(), solution->getSpeciesId(), parameters.currentGeneration,
 				points[index].objectives, solution->getParameters().partialFitness, solution->getFitness(),
 				points[index].violation };
-			if (paretoArchive.tryInsert(entry, SelectionConstants::dominanceEpsilon))
+			if (paretoArchive.tryInsert(entry, SelectionConstants::archiveEpsilon))
 			{
 				acceptedIntoArchive.push_back(solution->getId());
 			}
@@ -270,7 +271,7 @@ namespace neat_dnfs
 			[&points](const size_t index) { return points[index].violation == 0.0; }));
 		rankingSummary.lowestViolation = std::ranges::min(points | std::views::transform(&RankedPoint::violation));
 		rankingSummary.lowestViolationImproved = paretoArchive.size() == 0
-			&& rankingSummary.lowestViolation < violationToBeat - SelectionConstants::dominanceEpsilon;
+			&& rankingSummary.lowestViolation < violationToBeat - SelectionConstants::archiveEpsilon;
 	}
 
 	bool Population::hasParetoFrontImproved() const
@@ -278,14 +279,32 @@ namespace neat_dnfs
 		return !acceptedIntoArchive.empty() || rankingSummary.lowestViolationImproved;
 	}
 
-	bool Population::hasSpeciesImprovedOnTheFront(const Species& species) const
+	bool Population::offerSpeciesToItsFront(const Species& species)
 	{
-		return std::ranges::any_of(species.getMembers(), [this](const SolutionPtr& member)
+		auto& front = speciesFronts.try_emplace(species.getId(), SelectionConstants::archiveCapacity).first->second;
+		const double violationToBeat = front.bestViolationSeen();
+		bool accepted = false;
+		double lowestViolation = std::numeric_limits<double>::infinity();
+		for (const auto& member : species.getMembers())
+		{
+			const auto memberParameters = member->getParameters();
+			const ParetoArchiveEntry entry{ member->getId(), species.getId(), parameters.currentGeneration,
+				memberParameters.objectives, memberParameters.partialFitness, memberParameters.fitness,
+				memberParameters.constraintViolation };
+			accepted = front.tryInsert(entry, SelectionConstants::archiveEpsilon) || accepted;
+			lowestViolation = std::min(lowestViolation, memberParameters.constraintViolation);
+		}
+		const bool lowestViolationImproved = front.size() == 0
+			&& lowestViolation < violationToBeat - SelectionConstants::archiveEpsilon;
+		return accepted || lowestViolationImproved;
+	}
+
+	void Population::forgetFrontsOfExtinctSpecies()
+	{
+		std::erase_if(speciesFronts, [this](const auto& idAndFront)
 			{
-				const bool accepted = std::ranges::find(acceptedIntoArchive, member->getId()) != acceptedIntoArchive.end();
-				const bool holdsNewLowestViolation = rankingSummary.lowestViolationImproved
-					&& member->getParameters().constraintViolation == rankingSummary.lowestViolation;
-				return accepted || holdsNewLowestViolation;
+				return std::ranges::none_of(speciesList, [&idAndFront](const auto& species)
+					{ return species->getId() == idAndFront.first && !species->isExtinct(); });
 			});
 	}
 
@@ -342,10 +361,11 @@ namespace neat_dnfs
 		int improvedSpecies = 0;
 		for (const auto& species : speciesList)
 		{
-			const bool improved = hasSpeciesImprovedOnTheFront(*species);
+			const bool improved = !species->isExtinct() && offerSpeciesToItsFront(*species);
 			improvedSpecies += improved ? 1 : 0;
 			species->assignChampion(improved);
 		}
+		forgetFrontsOfExtinctSpecies();
 		logParetoProgress(improvedSpecies);
 	}
 

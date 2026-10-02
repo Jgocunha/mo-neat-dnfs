@@ -29,12 +29,13 @@ def pareto_markdown_lines(individuals: pd.DataFrame, recorded) -> list[str]:
     if individuals.empty:
         return []
     if recorded is None:
-        groups, epsilon, floor = [], 0.0, 0.0
+        groups, epsilon, floor, violation_epsilon = [], 0.0, 0.0, 0.0
         source = "per-individual partials in `statistics/` (the run predates `objectives.jsonl`); raw partials, ε 0, floor off"
     else:
         settings = recorded.settings
         groups = [list(g) for g in settings["objective_groups"]]
         epsilon, floor = float(settings["epsilon"]), float(settings["feasibility_floor"])
+        violation_epsilon = float(settings.get("violation_epsilon", 0.0))
         source = (
             f"`objectives.jsonl`: {settings['mode']} selection, groups `{format_groups(groups) or 'none'}`, "
             f"ε {epsilon:g}, floor {floor:g}"
@@ -44,7 +45,7 @@ def pareto_markdown_lines(individuals: pd.DataFrame, recorded) -> list[str]:
     members = individuals[individuals["generation"] == final_generation]
     space = space_for_rows(members, groups, groups)
     partials = members[numbered_columns(members, "p")].to_numpy()
-    summary = summarize_generation(space.values, partials, members["fitness"].to_numpy(), epsilon, floor)
+    summary = summarize_generation(space.values, partials, members["fitness"].to_numpy(), epsilon, floor, violation_epsilon)
 
     hv_note = "" if summary["hypervolume_exact"] else " (Monte-Carlo estimate)"
     hv_text = "none feasible" if summary["feasible_front0_size"] == 0 else f"{summary['hypervolume']:.4f}{hv_note}"

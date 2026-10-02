@@ -68,6 +68,8 @@ namespace
         SelectionConstants::dominanceEpsilon = 0.2;
         SelectionConstants::feasibilityFloor = 0.3;
         SelectionConstants::archiveCapacity = 5;
+        SelectionConstants::archiveEpsilon = 0.25;
+        SelectionConstants::violationEpsilon = 0.35;
     }
 
     // Asserts every selection field holds its compiled-in default.
@@ -78,6 +80,8 @@ namespace
         REQUIRE(SelectionConstants::dominanceEpsilon == 0.0);
         REQUIRE(SelectionConstants::feasibilityFloor == 0.0);
         REQUIRE(SelectionConstants::archiveCapacity == 100);
+        REQUIRE(SelectionConstants::archiveEpsilon == 0.0);
+        REQUIRE(SelectionConstants::violationEpsilon == 0.0);
     }
 
     // Restores the default (empty) grouping even when construction throws.
@@ -410,4 +414,47 @@ TEST_CASE("ConfigLoader reads saveParetoFront from PopulationConstants", "[Selec
     ConfigLoader::loadGlobalConfig(writeTempConfig(config, "save-pareto-front-off.json"));
 
     REQUIRE_FALSE(PopulationConstants::saveParetoFront);
+}
+
+TEST_CASE("ConfigLoader reads archiveEpsilon and violationEpsilon", "[SelectionConfig]")
+{
+    const RestoreReferenceConfig restore;
+
+    loadWithSelectionBlock({
+        { "dominanceEpsilon", 0.0 },
+        { "archiveEpsilon", 0.02 },
+        { "violationEpsilon", 0.03 },
+    }, "tolerances.json");
+
+    REQUIRE(SelectionConstants::dominanceEpsilon == 0.0);
+    REQUIRE(SelectionConstants::archiveEpsilon == Catch::Approx(0.02));
+    REQUIRE(SelectionConstants::violationEpsilon == Catch::Approx(0.03));
+}
+
+TEST_CASE("ConfigLoader defaults archiveEpsilon to dominanceEpsilon and violationEpsilon to 0", "[SelectionConfig]")
+{
+    const RestoreReferenceConfig restore;
+
+    loadWithSelectionBlock({ { "dominanceEpsilon", 0.04 } }, "tolerance-defaults.json");
+
+    REQUIRE(SelectionConstants::archiveEpsilon == Catch::Approx(0.04));
+    REQUIRE(SelectionConstants::violationEpsilon == 0.0);
+}
+
+TEST_CASE("ConfigLoader rejects out-of-range tolerances", "[SelectionConfig]")
+{
+    const RestoreReferenceConfig restore;
+
+    const std::vector<json> invalidBlocks{
+        { { "archiveEpsilon", -0.01 } },
+        { { "archiveEpsilon", 0.5 } },
+        { { "violationEpsilon", -0.01 } },
+        { { "violationEpsilon", 1.0 } },
+    };
+    for (const auto& block : invalidBlocks)
+    {
+        INFO(block.dump());
+        REQUIRE_THROWS_WITH(loadWithSelectionBlock(block, "out-of-range-tolerance.json"),
+            Catch::Matchers::ContainsSubstring(block.begin().key()));
+    }
 }

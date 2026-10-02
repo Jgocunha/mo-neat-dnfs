@@ -26,7 +26,7 @@ public:
     static void rankObjectives(Population& population) { population.rankObjectives(); }
     static bool isRankingObjectives(const Population& population) { return population.isRankingObjectives(); }
     static bool hasParetoFrontImproved(const Population& population) { return population.hasParetoFrontImproved(); }
-    static bool hasSpeciesImprovedOnTheFront(const Population& population, const Species& species) { return population.hasSpeciesImprovedOnTheFront(species); }
+    static bool offerSpeciesToItsFront(Population& population, const Species& species) { return population.offerSpeciesToItsFront(species); }
     static bool hasFitnessImprovedOverTheLastGenerations(Population& population) { return population.hasFitnessImprovedOverTheLastGenerations(); }
     static size_t archiveSize(const Population& population) { return population.paretoArchive.size(); }
     static std::shared_ptr<Species> speciesOf(Population& population, const SolutionPtr& solution) { return population.findSpecies(solution); }

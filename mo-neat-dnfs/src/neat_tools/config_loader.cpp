@@ -213,6 +213,7 @@ namespace neat_dnfs
 		{
 			static const std::set<std::string> known = {
 				"mode", "objectiveGroups", "dominanceEpsilon", "feasibilityFloor", "archiveCapacity",
+				"archiveEpsilon", "violationEpsilon",
 			};
 			for (const auto& item : block.items())
 			{
@@ -254,6 +255,13 @@ namespace neat_dnfs
 			{
 				ConfigLoader::field(block, "dominanceEpsilon", &SelectionConstants::dominanceEpsilon);
 				requireInRange("dominanceEpsilon", SelectionConstants::dominanceEpsilon, 0.0, 0.5);
+			}
+			SelectionConstants::archiveEpsilon = block.value("archiveEpsilon", SelectionConstants::dominanceEpsilon);
+			requireInRange("archiveEpsilon", SelectionConstants::archiveEpsilon, 0.0, 0.5);
+			if (block.contains("violationEpsilon"))
+			{
+				ConfigLoader::field(block, "violationEpsilon", &SelectionConstants::violationEpsilon);
+				requireInRange("violationEpsilon", SelectionConstants::violationEpsilon, 0.0, 1.0);
 			}
 			if (block.contains("feasibilityFloor"))
 			{
