@@ -17,8 +17,9 @@ namespace neat_dnfs
 	///
 	/// The one exception is the multi-objective selection settings: the whole
 	/// SelectionConstants block, each key inside it, and
-	/// PopulationConstants.saveObjectives are optional and fall back to their
-	/// compiled-in defaults (scalar selection; saveObjectives true). They were
+	/// PopulationConstants.saveObjectives and saveParetoFront are optional and
+	/// fall back to their compiled-in defaults (scalar selection; both flags
+	/// true). They were
 	/// added after users had written their own full --config files, and those
 	/// files must keep loading unchanged. Because optional keys would hide a
 	/// typo, an unknown key inside SelectionConstants is still an error.

@@ -55,10 +55,20 @@ namespace neat_dnfs
 		void saveSolutionPhenotype(const std::shared_ptr<Solution>& solution, const std::string& directoryPath) const;
 		/// @brief Writes pareto_archive.json at the end of a Pareto-mode run: the selection
 		/// settings, then every archive member's id, generation found, objectives, partials,
-		/// fitness and whether it is still in the final population. Saves the phenotypes of
-		/// those still alive under pareto_front/; a member that died earlier has no genome
-		/// left to build one from, so only its archive record remains.
+		/// fitness and whether it is still in the final population. When
+		/// PopulationConstants::saveParetoFront is on, also saves the phenotypes of those
+		/// still alive under pareto_front/last_generation/. A member that died earlier is
+		/// on disk under pareto_front/gen <generationFound>/ instead.
 		void saveParetoArchive() const;
+		/// @brief Saves the phenotype of every archive member in the current generation's
+		/// population under pareto_front/gen <generation>/, numbered like objectives.jsonl.
+		/// Every member is in the population of the generation that found it, so each one
+		/// is saved at least there. Writes nothing (no directory) when none is present.
+		void saveParetoFrontForGeneration() const;
+		/// @brief Saves the phenotype of every archive member still in the population.
+		/// @param directoryPath Directory the phenotypes are written to; created only if
+		/// at least one member is present.
+		void saveArchiveMembersInPopulation(const std::string& directoryPath) const;
 		void saveChampions() const;
 		void saveTimestampsAndDuration() const;
 		void saveRunMetadata() const;

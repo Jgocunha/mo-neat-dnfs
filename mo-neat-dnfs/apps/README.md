@@ -48,8 +48,8 @@ anything else it needs (a different `DimensionConstants.xSize`, say, or a differ
 result is validated strictly, so a missing key or a wrong-length weight array is a startup
 error rather than a silently wrong run. The one exception is the multi-objective selection
 settings: the `SelectionConstants` block, each key in it, and `PopulationConstants.saveObjectives`
-may be omitted and fall back to their defaults (scalar selection; `saveObjectives` true), so a
-`--config` file written before they existed keeps loading. A mistyped key inside
+and `saveParetoFront` may be omitted and fall back to their defaults (scalar selection; both
+flags true), so a `--config` file written before they existed keeps loading. A mistyped key inside
 `SelectionConstants` is still an error.
 
 Each `config/solutions/<task>.json` also sets `SelectionConstants.objectiveGroups`, which

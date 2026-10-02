@@ -384,3 +384,27 @@ TEST_CASE("A pareto-selection preset keeps the task's objective groups", "[Selec
 
     REQUIRE(SelectionConstants::objectiveGroups == std::vector<std::vector<size_t>>{ { 0, 2 }, { 1, 3, 4 }, { 5, 6, 7 } });
 }
+
+TEST_CASE("ConfigLoader defaults saveParetoFront to true when the key is absent", "[SelectionConfig]")
+{
+    const RestoreReferenceConfig restore;
+    auto config = referenceConfig();
+    config["PopulationConstants"].erase("saveParetoFront");
+    const auto path = writeTempConfig(config, "no-save-pareto-front.json");
+    PopulationConstants::saveParetoFront = false;
+
+    REQUIRE_NOTHROW(ConfigLoader::loadGlobalConfig(path));
+
+    REQUIRE(PopulationConstants::saveParetoFront);
+}
+
+TEST_CASE("ConfigLoader reads saveParetoFront from PopulationConstants", "[SelectionConfig]")
+{
+    const RestoreReferenceConfig restore;
+    auto config = referenceConfig();
+    config["PopulationConstants"]["saveParetoFront"] = false;
+
+    ConfigLoader::loadGlobalConfig(writeTempConfig(config, "save-pareto-front-off.json"));
+
+    REQUIRE_FALSE(PopulationConstants::saveParetoFront);
+}
