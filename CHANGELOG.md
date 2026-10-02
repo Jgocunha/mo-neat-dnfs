@@ -9,6 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Groundwork for multi-objective (Pareto) selection.** Off by default: selection and every existing output are unchanged.
+  - `neat/pareto.h`: epsilon-dominance, Deb 2002 constrained-domination, the NSGA-II non-dominated sort and crowding distance, and a bounded `ParetoArchive`. All are pure functions with no RNG.
+  - A new, optional `SelectionConstants` config block (`mode`, `objectiveGroups`, `dominanceEpsilon`, `feasibilityFloor`, `archiveCapacity`). If the block, or any key in it, is absent, the default applies, so existing `--config` files keep loading. A mistyped key inside the block is an error.
+  - `objectiveGroups` partitions a task's partial fitnesses into objectives. Each solution validates it against its own partial count at construction, and derives `SolutionParameters::objectives` (the weighted mean of each group) after every `evaluate()`.
+  - **`objectives.jsonl`**, a new per-generation file in the run directory. It is written in scalar mode too, gated by a new, optional `PopulationConstants.saveObjectives` flag (default `true`). Each line holds the selection settings; every solution's partials, objectives, Pareto rank, crowding distance (`null` for a boundary point, since JSON has no infinity) and constraint violation; and the Pareto archive's size and this generation's accepted ids. The ranking is computed only when this file is written, draws no random numbers, and does not affect selection. Every existing output file is unchanged, and so are `profile.csv`'s columns (the ranking is timed inside `evaluate`).
+- **A Pareto page in the visualizer**, which opens every run: runs that wrote `objectives.jsonl` use their recorded objectives and settings; older runs are ranked from the per-individual partials in `statistics/`.
+  - Controls: generation, objective grouping (`0,2 | 1,3,4 | ...`), dominance ε and feasibility floor. They default to the run's recorded settings, which then reproduce its recorded ranks.
+  - Headline metrics: front-0 size, number of fronts, hypervolume (exact for up to 3 objectives, a seeded Monte-Carlo estimate above that), feasible share, specialist share of front 0, archive size, and the front the weighted-sum best individual sits on.
+  - Charts: the population on two objectives (with front 0's 2-D projection), parallel coordinates of front 0 on every raw partial, a scatter matrix, front 0 over generations, the metrics over generations, and an objective-conflict (correlation) heatmap. A front-0 table feeds the genome inspector.
+  - The Experiment page can show every run's final hypervolume and the union of their final fronts. The Compare page can compare final hypervolume across experiments of the same task, with a Mann–Whitney U test. The run export gains a Pareto section.
+  - The statistics scan now also caches a per-individual table, so the on-disk cache version is bumped and existing `.viz_cache/` entries are rebuilt once.
+  - Fixed: `theme.theme_type()` now follows the server's configured `theme.base` first, since Streamlit 1.52 reports a "light" theme context even on a dark-configured server.
+- **Pareto selection mode** (`SelectionConstants.mode = "pareto"`). Scalar mode stays the default, and behaves exactly as before. In Pareto mode:
+  - every selection decision compares solutions by Pareto front, then by crowding distance, instead of by weighted-sum fitness. This covers species sorting, pruning and champions, the fitter crossover parent, the best species, and the solution evicted to make room for the preserved best. Crossover treats two parents as equally fit when they are on the same front and neither dominates the other. Offspring that have not been ranked yet sort last;
+  - offspring are allocated between species from a weight-free selection fitness, `(fronts − rank) / fronts`, divided by species size;
+  - stagnation counts archive progress, not best-fitness gains:
+    - the population improves when the archive accepts a point, or, while nothing is feasible, when the lowest constraint violation falls by more than ε;
+    - a species improves when the archive accepts one of its current members.
+
+    The `hasFitnessImproved` value that `overview.jsonl` and `per_generation_overview.txt` already write reports this signal;
+  - the weighted-sum best solution, elitism and the end condition (`targetFitness`) are unchanged, so scalar and Pareto runs stop under the same rule;
+  - the ranking runs every generation, whether or not `objectives.jsonl` is written;
+  - at the end of the run, a new **`pareto_archive.json`** holds every archive member's id, generation found, objectives, partials, fitness and whether it is in the final population. The phenotypes of those still alive are saved under **`pareto_front/`**.
+
+  There is no preset yet: to turn it on, set the block in a `--config` file or an ablation preset.
+
 ### Changed
 - **Split off from neat-dnfs as mo-neat-dnfs** (multi-objective neuroevolution of augmenting dynamic neural field topologies). Every entry below this one is neat-dnfs history, up to and including its v0.3.0 release. From here the two projects diverge: mo-neat-dnfs adds Pareto selection, and neat-dnfs stays single-objective. The rename is project-level only:
   - the nested project folder is now `mo-neat-dnfs/`, and the CMake project, library, test target and executables are `mo-neat-dnfs`, `mo-neat-dnfs-test`, `mo-neat-dnfs-evol`, `mo-neat-dnfs-inc-evol` and `mo-neat-dnfs-sol-eval`. The installed data directory is `share/mo-neat-dnfs/`, the CMake package is `mo-neat-dnfs`, and archives are named `mo-neat-dnfs-<version>-...`

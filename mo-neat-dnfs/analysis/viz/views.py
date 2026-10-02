@@ -1,14 +1,19 @@
 import math
 from pathlib import Path
+import numpy as np
 import pandas as pd
 import streamlit as st
 
 from .genome import build_topology_graph, compute_kernel_usage_stats, summarize_best_solution_genome
 from .stats import compute_fitness_stats, compute_partial_component_failure_rates, compute_species_stats, compute_topology_frequency, compute_topology_stats, display_gen, find_invariant_violations, mann_whitney_u, spearman_correlation, topology_distance
+from .plots import chart_front0_scatter_matrix, chart_front_evolution, chart_front_union, chart_hypervolume_by_run, chart_objective_correlation, chart_parallel_coordinates, chart_pareto_metrics, chart_pareto_scatter
 from .plots import chart_all_runs_overlay, chart_architecture_complexity_scatter, chart_best_mutation_timeline, chart_convergence_generations_histogram, chart_cross_experiment_boxplot, chart_first_crossing_per_component, chart_genome_topology_curves, chart_innovation_growth, chart_kernel_usage_time, chart_lineage_fitness, chart_mutation_categories, chart_mutation_effectiveness, chart_mutations_per_generation, chart_partial_component_failure_rates, chart_partial_component_heatmap, chart_partial_fitness_grid, chart_population_distribution, chart_run_duration_histogram, chart_seconds_per_generation_histogram, chart_species_champion_trajectory, chart_species_counts, chart_species_lifespans, chart_species_membership, chart_topology_frequency_heatmap, chart_topology_trajectory, chart_total_fitness, plot_topology_graph, show_fig
+from .parsing import find_runs_with_overview, find_solution_blob_in_generation, load_pareto_population
 from .parsing import _sample_evenly, compute_mutation_events, compute_partial_fitness, compute_per_generation_best_mutation, compute_population_distributions, compute_population_kernel_usage, compute_population_parameter_distributions, compute_species_meta, compute_target_crossing_mutations, compute_topology_trajectory, find_experiment_dirs, first_crossing_per_component, format_ram_bytes, generations_all_partial_meet_targets, get_best_solution_id, get_species_for_generation, list_champion_generations, load_best_solution_architecture, load_champion_architecture, load_run_metadata, parse_vcpkg_package_list, species_champion_fitness_trajectory, trace_lineage
 from .experiment import _load_experiment_runs_parsed, compute_experiment_convergence, compute_experiment_totals, compute_partial_fitness_best_only
 from .solution_record import parse_solution_blob
+from .pareto import constraint_violation, correlation_long, format_groups, generation_metrics, non_dominated_sort, numbered_columns, parse_groups, space_for_rows, staircase_2d, summarize_generation, validate_partition
+from .theme import theme_type
 
 def _clamp(v: float, lo: float, hi: float) -> float:
     """Clamp v into [lo, hi]. Used to keep a target value carried over in session
@@ -1662,6 +1667,9 @@ def render_experiment_view(base_dir_str: str):
     agg_totals, df_totals = compute_experiment_totals(base_dir_str)
     render_experiment_totals(agg_totals, df_totals)
 
+    st.divider()
+    render_experiment_pareto(base_dir_str)
+
 
 @st.fragment
 def render_cross_experiment_view(data_root_str: str):
@@ -1755,3 +1763,469 @@ def render_cross_experiment_view(data_root_str: str):
                 f"Generations-to-threshold vs. **{reference_name}** (n={len(ref_vals)}). "
                 "Normal-approximation p-value; treat as indicative only for small n."
             )
+
+    st.divider()
+    render_cross_experiment_pareto(selected_names, experiment_paths)
+
+
+# ---------------------------------------------------------------------------------------------
+# Pareto page. Ranks are always re-computed here from the objective vectors, so the epsilon and
+# feasibility-floor sliders work on every run; for a run that wrote objectives.jsonl, the
+# defaults are its own settings and reproduce the ranks it recorded.
+# ---------------------------------------------------------------------------------------------
+
+_EPSILON_MAX = 0.49
+_FLOOR_MAX = 0.99
+
+
+def _recorded_settings(recorded) -> tuple[list[list[int]], float, float]:
+    if recorded is None:
+        return [], 0.0, 0.0
+    settings = recorded.settings
+    return [list(g) for g in settings["objective_groups"]], float(settings["epsilon"]), float(settings["feasibility_floor"])
+
+
+def _render_space_settings(partial_count: int, recorded, key_prefix: str) -> tuple[list[list[int]], float, float] | None:
+    """Grouping, epsilon and feasibility-floor controls, defaulting to the run's recorded values
+    (or raw partials / 0 / 0 for an older run). Returns None when the grouping text is invalid."""
+    default_groups, default_epsilon, default_floor = _recorded_settings(recorded)
+    col_groups, col_epsilon, col_floor = st.columns([2, 1, 1])
+    with col_groups:
+        groups_text = st.text_input(
+            "Objective groups",
+            value=format_groups(default_groups),
+            key=f"{key_prefix}_groups",
+            help="0-based partial indices per objective, e.g. `0,2 | 1,3,4 | 5,6,7` (p1 is index 0). "
+            "Leave blank to use the raw partials as objectives.",
+        )
+    with col_epsilon:
+        epsilon = st.slider("Dominance ε", 0.0, _EPSILON_MAX, min(default_epsilon, _EPSILON_MAX), 0.005, key=f"{key_prefix}_epsilon")
+    with col_floor:
+        floor = st.slider(
+            "Feasibility floor",
+            0.0,
+            _FLOOR_MAX,
+            min(default_floor, _FLOOR_MAX),
+            0.01,
+            key=f"{key_prefix}_floor",
+            help="A solution with any raw partial below this is infeasible and ranks behind every "
+            "feasible one. 0 turns the constraint off.",
+        )
+    try:
+        groups = parse_groups(groups_text)
+    except ValueError as error:
+        st.error(f"Objective groups: {error}")
+        return None
+    problem = validate_partition(groups, partial_count)
+    if problem:
+        st.error(f"Objective groups must partition the {partial_count} partials: {problem}.")
+        return None
+    return groups, float(epsilon), float(floor)
+
+
+def _render_pareto_source_note(recorded) -> None:
+    if recorded is None:
+        st.caption(
+            "This run has no `objectives.jsonl` (it predates it), so objectives come from each "
+            "individual's partials in `statistics/`, and ranks are computed here. Grouped objectives "
+            "use plain means, because older runs do not record their fitness weights."
+        )
+        return
+    groups, epsilon, floor = _recorded_settings(recorded)
+    st.caption(
+        f"From `objectives.jsonl`: {recorded.settings['mode']} selection, recorded groups "
+        f"`{format_groups(groups) or 'none (raw partials)'}`, ε {epsilon:g}, floor {floor:g}. "
+        "With these defaults the ranks below reproduce the ones the run recorded."
+    )
+
+
+def _generation_slider(generations: list[int], key: str) -> int:
+    chosen = st.slider(
+        "Generation",
+        min_value=display_gen(generations[0]),
+        max_value=display_gen(generations[-1]),
+        value=display_gen(generations[-1]),
+        key=key,
+    )
+    eligible = [g for g in generations if g <= chosen - 1]
+    return eligible[-1] if eligible else generations[0]
+
+
+def _warn_if_outside_unit_interval(members: pd.DataFrame) -> None:
+    partials = members[numbered_columns(members, "p")].to_numpy()
+    outside = int(((partials < 0) | (partials > 1)).sum())
+    if outside:
+        st.warning(f"{outside} partial value(s) fall outside [0, 1] and are clipped for ranking and hypervolume.")
+
+
+def _archive_size(recorded, generation0: int) -> str:
+    if recorded is None or recorded.archive.empty:
+        return _NOT_RECORDED
+    row = recorded.archive[recorded.archive["generation"] == generation0]
+    return _NOT_RECORDED if row.empty else f"{int(row['size'].iloc[0])} (+{int(row['accepted'].iloc[0])})"
+
+
+def _render_pareto_kpis(summary: dict, space, member_count: int, floor: float, archive_text: str) -> None:
+    hv = summary["hypervolume"]
+    hv_text = f"{hv:.4f}" if summary["hypervolume_exact"] else f"≈ {hv:.4f}"
+    if summary["feasible_front0_size"] == 0:
+        hv_text = "none feasible"
+    hv_help = (
+        "Volume of [0,1]^m dominated by the feasible front-0 points (reference point 0)."
+        + ("" if summary["hypervolume_exact"] else " Monte-Carlo estimate from 100k seeded samples, since m > 3.")
+    )
+    specialists = summary["specialist_share"]
+    row1 = st.columns(4)
+    row1[0].metric("Front 0", f"{summary['front0_size']} of {member_count}")
+    row1[0].caption(f"{100 * summary['front0_share']:.1f}% of the population is non-dominated")
+    row1[1].metric("Fronts", summary["n_fronts"])
+    row1[2].metric("Hypervolume", hv_text, help=hv_help)
+    row1[3].metric(
+        "Scalar-best rank",
+        f"front {summary['scalar_best_rank']}",
+        help="The front the weighted-sum best individual sits on. Front 0 means the weighted sum is picking a Pareto-optimal solution.",
+    )
+    row2 = st.columns(4)
+    row2[0].metric("Objectives (m)", len(space.labels), help=f"Values: {space.source}.")
+    row2[1].metric(
+        "Specialists in front 0",
+        _NOT_RECORDED if math.isnan(specialists) else f"{100 * specialists:.1f}%",
+        help="Front-0 members with some raw partial below 0.1: always-on, always-off or do-nothing controllers.",
+    )
+    row2[2].metric("Feasible", f"{100 * summary['feasible_share']:.1f}%" if floor > 0 else "floor off")
+    row2[3].metric("Archive", archive_text, help="Pareto archive size (and entries accepted) this generation, as recorded by the run.")
+
+
+def _population_frame(members: pd.DataFrame, values, summary: dict, x_index: int, y_index: int) -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "id": members["id"].to_numpy(),
+            "species": members["species"].to_numpy(),
+            "fitness": members["fitness"].to_numpy(),
+            "x": values[:, x_index],
+            "y": values[:, y_index],
+            "rank": summary["ranks"],
+            "feasible": summary["violations"] <= 0,
+        }
+    )
+
+
+def _staircase_frame(xy) -> pd.DataFrame:
+    return pd.DataFrame(staircase_2d(xy), columns=["x", "y"])
+
+
+def _parallel_coordinates_frame(members: pd.DataFrame, summary: dict) -> tuple[pd.DataFrame, list[str]]:
+    partial_columns = numbered_columns(members, "p")
+    best_position = int(members["fitness"].to_numpy().argmax())
+    keep = (summary["ranks"] == 0) | (pd.RangeIndex(len(members)) == best_position)
+    chosen = members[keep].assign(scalar_best=members["id"].iloc[best_position] == members[keep]["id"])
+    long_df = chosen.melt(id_vars=["id", "scalar_best"], value_vars=partial_columns, var_name="axis", value_name="value")
+    return long_df, partial_columns
+
+
+def _sampled_generations(generations: list[int], step: int) -> list[int]:
+    sampled = generations[::step]
+    return sampled if sampled[-1] == generations[-1] else sampled + [generations[-1]]
+
+
+def _objective_pickers(labels: list[str], key_prefix: str) -> tuple[int, int]:
+    """x and y objective selectboxes. The widget keys include the label set, so switching the
+    objective space (raw partials <-> groups) starts from fresh defaults instead of a stale choice
+    that is no longer an option."""
+    space_key = "|".join(labels)
+    col_x, col_y = st.columns(2)
+    x_label = col_x.selectbox("x objective", labels, index=0, key=f"{key_prefix}_x_{space_key}")
+    y_label = col_y.selectbox("y objective", labels, index=min(1, len(labels) - 1), key=f"{key_prefix}_y_{space_key}")
+    return labels.index(x_label), labels.index(y_label)
+
+
+@st.cache_data(show_spinner="Ranking the sampled generations...")
+def _cached_front_evolution(run_path: str, groups_key: tuple, epsilon: float, floor: float, generations: tuple,
+                            x_index: int, y_index: int) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Front 0 of each sampled generation on the chosen pair (points and 2-D staircase). Cached:
+    it re-ranks every sampled generation, and the fragment reruns on every widget change."""
+    individuals, recorded = load_pareto_population(run_path)
+    recorded_groups, _, _ = _recorded_settings(recorded)
+    groups = [list(g) for g in groups_key]
+    points, steps = [], []
+    for generation in generations:
+        members = individuals[individuals["generation"] == generation]
+        space = space_for_rows(members, groups, recorded_groups)
+        partials = members[numbered_columns(members, "p")].to_numpy()
+        violations = constraint_violation(partials, floor)
+        ranks = non_dominated_sort(np.clip(space.values, 0, 1), epsilon, violations)
+        xy = space.values[ranks == 0][:, [x_index, y_index]]
+        points.append(pd.DataFrame(xy, columns=["x", "y"]).assign(gen_display=display_gen(generation)))
+        steps.append(_staircase_frame(xy).assign(gen_display=display_gen(generation)))
+    return pd.concat(points, ignore_index=True), pd.concat(steps, ignore_index=True)
+
+
+@st.cache_data(show_spinner="Ranking the sampled generations...")
+def _cached_generation_metrics(run_path: str, groups_key: tuple, epsilon: float, floor: float, generations: tuple) -> pd.DataFrame:
+    individuals, recorded = load_pareto_population(run_path)
+    recorded_groups, _, _ = _recorded_settings(recorded)
+    groups = [list(g) for g in groups_key]
+    return generation_metrics(individuals, generations, groups, recorded_groups, epsilon, floor)
+
+
+def _render_front0_table(members: pd.DataFrame, space, summary: dict, run_path: str, generation0: int, key_prefix: str) -> None:
+    front0 = summary["ranks"] == 0
+    table = pd.DataFrame(space.values[front0], columns=space.labels)
+    crowding = summary["crowding"][front0]
+    table.insert(0, "crowding", ["∞" if math.isinf(c) else f"{c:.3f}" for c in crowding])
+    table.insert(0, "fitness", members["fitness"].to_numpy()[front0])
+    table.insert(0, "species", members["species"].to_numpy()[front0])
+    table.insert(0, "id", members["id"].to_numpy()[front0])
+    table = table.iloc[np.argsort(-crowding, kind="stable")].reset_index(drop=True)
+    column_config = {
+        "id": st.column_config.NumberColumn("solution", format="%d"),
+        "species": st.column_config.NumberColumn("species", format="%d"),
+        "fitness": st.column_config.NumberColumn("fitness", format="%.4f"),
+        "crowding": st.column_config.TextColumn("crowding", help="Crowding distance within front 0; ∞ marks a boundary point. Most isolated first."),
+    }
+    event = st.dataframe(
+        table, width="stretch", hide_index=True, column_config=column_config,
+        on_select="rerun", selection_mode="single-row", key=f"{key_prefix}_front0_table",
+    )
+    selected_rows = event.selection.rows if event is not None else []
+    if not selected_rows:
+        st.caption("Select a row to inspect that solution's genome.")
+        return
+    solution_id = int(table.loc[selected_rows[0], "id"])
+    st.markdown(f"#### Solution {solution_id}")
+    _render_solution_record(find_solution_blob_in_generation(run_path, generation0, solution_id))
+
+
+def _render_generation_charts(members: pd.DataFrame, space, summary: dict, mode: str, key_prefix: str) -> tuple[int, int]:
+    """The selected generation on two objectives, on every raw partial, and (for 3-8 objectives)
+    as a scatter matrix. Returns the chosen (x, y) objective indices for the later sections."""
+    labels = space.labels
+    x_index, y_index = _objective_pickers(labels, key_prefix)
+    color_by = st.radio("Color by", ["front", "species"], key=f"{key_prefix}_color", horizontal=True)
+
+    population = _population_frame(members, np.clip(space.values, 0, 1), summary, x_index, y_index)
+    front0_xy = population[population["rank"] == 0][["x", "y"]].to_numpy()
+    scatter = chart_pareto_scatter(
+        population, _staircase_frame(front0_xy), labels[x_index], labels[y_index],
+        "species" if color_by == "species" else "rank", mode,
+    )
+    st.altair_chart(scatter, width="stretch")
+    st.caption(
+        "The dashed staircase is front 0 re-computed on these two objectives alone. A projection of the "
+        "m-D front is not itself a front, so m-D front-0 points can sit below it."
+    )
+
+    long_df, axes = _parallel_coordinates_frame(members, summary)
+    st.altair_chart(chart_parallel_coordinates(long_df, axes, mode), width="stretch")
+    st.caption(f"The scalar-best individual is on front {summary['scalar_best_rank']}. Lines at 0 on an axis are degenerate specialists.")
+
+    if 2 < len(labels) <= 8:
+        with st.expander("Scatter matrix of front 0", expanded=False):
+            front0 = summary["ranks"] == 0
+            front0_values = pd.DataFrame(space.values[front0], columns=labels).assign(id=members["id"].to_numpy()[front0])
+            st.altair_chart(chart_front0_scatter_matrix(front0_values, labels), width="content")
+    return x_index, y_index
+
+
+def _render_over_generations(run_path: str, generations: list[int], settings: tuple, labels: list[str],
+                             axis: tuple[int, int], mode: str, key_prefix: str) -> None:
+    """Front 0 of sampled generations on the chosen pair, and the headline metrics over time."""
+    groups, epsilon, floor = settings
+    groups_key = tuple(tuple(g) for g in groups)
+    x_index, y_index = axis
+    st.markdown("### Over generations")
+    step, _ = _render_sampling_controls(f"{key_prefix}_sampling", len(generations), include_max_solutions=False)
+    sampled = tuple(_sampled_generations(generations, step))
+
+    points, steps = _cached_front_evolution(run_path, groups_key, epsilon, floor, sampled, x_index, y_index)
+    st.altair_chart(chart_front_evolution(points, steps, labels[x_index], labels[y_index], mode), width="stretch")
+
+    metrics = _cached_generation_metrics(run_path, groups_key, epsilon, floor, sampled)
+    metrics_long = metrics.melt(id_vars="gen_display", var_name="metric", value_name="value")
+    if len(labels) > 3:
+        metrics_long["metric"] = metrics_long["metric"].replace({"hypervolume": "hypervolume (estimate)"})
+    st.altair_chart(chart_pareto_metrics(metrics_long), width="content")
+    with st.expander("Table view", expanded=False):
+        st.dataframe(metrics, width="stretch", hide_index=True)
+
+
+def _render_objective_conflict(individuals: pd.DataFrame, groups, recorded_groups, labels: list[str], mode: str) -> None:
+    """Correlation between objectives, pooled over every generation."""
+    pooled = space_for_rows(individuals, groups, recorded_groups)
+    st.altair_chart(chart_objective_correlation(correlation_long(pooled.values, labels), labels, mode), width="content")
+    st.caption(
+        "Pooled over every generation (correlation across the population). Negative cells are genuine "
+        "trade-offs; cells near +1 are redundant objectives that could share a group."
+    )
+
+
+@st.fragment
+def render_pareto_view(selected_run_path: str):
+    """Multi-objective view of one run: fronts, trade-offs and how they evolve. Works on every
+    run -- from objectives.jsonl when the run wrote it, else from statistics/."""
+    individuals, recorded = load_pareto_population(selected_run_path)
+    if individuals.empty:
+        st.info(
+            "No objective data for this run: it has neither `objectives.jsonl` nor per-individual "
+            "`statistics/` files, so there is nothing to rank."
+        )
+        return
+    _render_pareto_source_note(recorded)
+
+    partial_columns = numbered_columns(individuals, "p")
+    generations = sorted(int(g) for g in individuals["generation"].unique())
+    recorded_groups, _, _ = _recorded_settings(recorded)
+
+    # Widget state is per run: a key shared across runs would carry the previous run's grouping,
+    # epsilon and floor over instead of defaulting to this run's recorded settings.
+    key_prefix = f"pareto|{selected_run_path}"
+    settings = _render_space_settings(len(partial_columns), recorded, key_prefix)
+    if settings is None:
+        return
+    groups, epsilon, floor = settings
+    generation0 = _generation_slider(generations, f"{key_prefix}_generation")
+
+    members = individuals[individuals["generation"] == generation0].reset_index(drop=True)
+    _warn_if_outside_unit_interval(members)
+    space = space_for_rows(members, groups, recorded_groups)
+    partials = members[partial_columns].to_numpy()
+    summary = summarize_generation(space.values, partials, members["fitness"].to_numpy(), epsilon, floor)
+    _render_pareto_kpis(summary, space, len(members), floor, _archive_size(recorded, generation0))
+
+    st.divider()
+    if len(space.labels) < 2:
+        st.info("Only one objective in this space, so there is no trade-off to plot. Use more groups or the raw partials.")
+    else:
+        mode = theme_type()
+        axis = _render_generation_charts(members, space, summary, mode, key_prefix)
+
+        st.divider()
+        _render_over_generations(selected_run_path, generations, (groups, epsilon, floor), space.labels, axis, mode, key_prefix)
+
+        st.divider()
+        _render_objective_conflict(individuals, groups, recorded_groups, space.labels, mode)
+
+    st.divider()
+    st.markdown(f"### Front 0 of generation {display_gen(generation0)}")
+    _render_front0_table(members, space, summary, selected_run_path, generation0, key_prefix)
+
+
+def _final_front(run_path: str, partial_count: int, groups: list[list[int]], epsilon: float, floor: float):
+    """(objective values, summary, labels) of a run's last generation, or None when the run has
+    no objective data or a different partial count (another task: its hypervolume would live in
+    a different objective space)."""
+    individuals, recorded = load_pareto_population(run_path)
+    if individuals.empty or len(numbered_columns(individuals, "p")) != partial_count:
+        return None
+    recorded_groups, _, _ = _recorded_settings(recorded)
+    members = individuals[individuals["generation"] == individuals["generation"].max()]
+    space = space_for_rows(members, groups, recorded_groups)
+    partials = members[numbered_columns(members, "p")].to_numpy()
+    summary = summarize_generation(space.values, partials, members["fitness"].to_numpy(), epsilon, floor)
+    return space.values, summary, space.labels
+
+
+def _first_run_partial_count(run_paths) -> tuple[int, object]:
+    for path in run_paths:
+        individuals, recorded = load_pareto_population(str(path))
+        if not individuals.empty:
+            return len(numbered_columns(individuals, "p")), recorded
+    return 0, None
+
+
+def _first_experiment_with_objectives(selected_names: list[str], experiment_paths: dict) -> tuple[str | None, int, object]:
+    """(name, partial count, recorded objectives) of the first selected experiment with objective
+    data, so an older experiment listed first does not hide the comparison."""
+    for name in selected_names:
+        run_paths = [path for _, path in find_runs_with_overview(experiment_paths[name])]
+        partial_count, recorded = _first_run_partial_count(run_paths)
+        if partial_count > 0:
+            return name, partial_count, recorded
+    return None, 0, None
+
+
+def render_experiment_pareto(base_dir_str: str):
+    """Final-generation hypervolume of every run, and the union of their final fronts."""
+    if not st.toggle("Pareto fronts across runs", key="experiment_pareto", help="Ranks every run's final generation; the first time, older runs need a full statistics/ scan."):
+        return
+    run_paths = [path for _, path in find_runs_with_overview(Path(base_dir_str))]
+    partial_count, recorded = _first_run_partial_count(run_paths)
+    if partial_count == 0:
+        st.info("No run in this experiment has objective data.")
+        return
+    key_prefix = f"experiment_pareto|{base_dir_str}"
+    settings = _render_space_settings(partial_count, recorded, key_prefix)
+    if settings is None:
+        return
+    groups, epsilon, floor = settings
+
+    hv_rows, point_frames, labels, estimate = [], [], None, False
+    for path in run_paths:
+        final = _final_front(str(path), partial_count, groups, epsilon, floor)
+        if final is None:
+            continue
+        values, summary, labels = final
+        estimate = not summary["hypervolume_exact"]
+        hv_rows.append({"run": path.name, "hypervolume": summary["hypervolume"]})
+        point_frames.append((path.name, values[summary["ranks"] == 0]))
+    if not hv_rows:
+        st.info("No run in this experiment has objective data for this grouping.")
+        return
+
+    col_hv, col_union = st.columns([1, 3])
+    col_hv.altair_chart(chart_hypervolume_by_run(pd.DataFrame(hv_rows), estimate))
+    with col_union:
+        x_index, y_index = _objective_pickers(labels, key_prefix)
+        x_label, y_label = labels[x_index], labels[y_index]
+        points = pd.concat(
+            [pd.DataFrame(values[:, [x_index, y_index]], columns=["x", "y"]).assign(run=name) for name, values in point_frames],
+            ignore_index=True,
+        )
+        st.altair_chart(chart_front_union(points, _staircase_frame(points[["x", "y"]].to_numpy()), x_label, y_label, theme_type()), width="stretch")
+
+
+def render_cross_experiment_pareto(selected_names: list[str], experiment_paths: dict):
+    """Final hypervolume per experiment, with Mann-Whitney U against a reference -- the
+    scalar-vs-Pareto verdict view. Compare experiments of the same task: hypervolume from
+    different objective spaces is not comparable."""
+    if not st.toggle("Compare final hypervolume", key="compare_pareto", help="Ranks every run's final generation; older runs need a full statistics/ scan the first time."):
+        return
+    source_name, partial_count, recorded = _first_experiment_with_objectives(selected_names, experiment_paths)
+    if source_name is None:
+        st.info("None of the selected experiments has objective data.")
+        return
+    settings = _render_space_settings(partial_count, recorded, "compare_pareto")
+    if settings is None:
+        return
+    groups, epsilon, floor = settings
+
+    plottable, skipped = {}, []
+    for name in selected_names:
+        values = []
+        for _, path in find_runs_with_overview(experiment_paths[name]):
+            final = _final_front(str(path), partial_count, groups, epsilon, floor)
+            if final is not None:
+                values.append(final[1]["hypervolume"])
+        if values:
+            plottable[name] = values
+        else:
+            skipped.append(name)
+    if skipped:
+        st.caption(
+            f"Skipped: {', '.join(skipped)} -- no objective data, or a different number of partials than "
+            f"{source_name} ({partial_count}), so a different task whose hypervolume is not comparable."
+        )
+    if not plottable:
+        return
+    st.altair_chart(chart_cross_experiment_boxplot(plottable, title="Final hypervolume across experiments", y_title="hypervolume"), width="stretch")
+    if len(plottable) < 2:
+        return
+    reference_name = st.selectbox("Reference experiment", list(plottable.keys()), key="compare_pareto_reference")
+    rows = []
+    for name, vals in plottable.items():
+        if name == reference_name:
+            continue
+        u, p = mann_whitney_u(plottable[reference_name], vals)
+        rows.append({"experiment": name, "n": len(vals), "U": u, "p-value": p})
+    st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+    st.caption(f"Final hypervolume vs. **{reference_name}**. Normal-approximation p-value; indicative only for small n.")

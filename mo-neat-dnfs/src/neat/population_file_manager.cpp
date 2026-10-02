@@ -48,6 +48,10 @@ namespace neat_dnfs
 		{
 			savePerGenerationOverviewJson();
 		}
+		if (PopulationConstants::saveObjectives)
+		{
+			saveObjectivesForGeneration();
+		}
 	}
 
 	void PopulationFileManager::savePerGenerationData() const
@@ -89,6 +93,10 @@ namespace neat_dnfs
 		{
 			saveChampions();
 		}
+		if (SelectionConstants::mode == SelectionMode::Pareto)
+		{
+			saveParetoArchive();
+		}
 	}
 
 	void PopulationFileManager::setFileDirectory()
@@ -125,27 +133,34 @@ namespace neat_dnfs
 		{
 			if (solution->getFitness() > fitness)
 			{
-				solution->buildPhenotype();
-				solution->createPhenotypeEnvironment();
-				auto simulation = solution->getPhenotype();
-				solution->clearPhenotype();
-				// save weights
-				for (const auto& element : simulation.getElements())
-				{
-					if (element->getLabel() == element::ElementLabel::FIELD_COUPLING)
-					{
-						const auto fieldCoupling = std::dynamic_pointer_cast<element::FieldCoupling>(element);
-						fieldCoupling->writeWeights();
-					}
-				}
-				// save elements
-				const std::string uniqueIdentifier = solutionIdentifier(solution->getId(),
-					population->parameters.currentGeneration, solution->getSpeciesId(), solution->getFitness());
-				simulation.setUniqueIdentifier(uniqueIdentifier);
-				SimulationFileManager sfm(std::make_shared<Simulation>(simulation), directoryPath);
-				sfm.saveElementsToJson();
+				saveSolutionPhenotype(solution, directoryPath);
 			}
 		}
+	}
+
+	void PopulationFileManager::saveSolutionPhenotype(const SolutionPtr& solution, const std::string& directoryPath) const
+	{
+		using namespace dnf_composer;
+
+		solution->buildPhenotype();
+		solution->createPhenotypeEnvironment();
+		auto simulation = solution->getPhenotype();
+		solution->clearPhenotype();
+		// save weights
+		for (const auto& element : simulation.getElements())
+		{
+			if (element->getLabel() == element::ElementLabel::FIELD_COUPLING)
+			{
+				const auto fieldCoupling = std::dynamic_pointer_cast<element::FieldCoupling>(element);
+				fieldCoupling->writeWeights();
+			}
+		}
+		// save elements
+		const std::string uniqueIdentifier = solutionIdentifier(solution->getId(),
+			population->parameters.currentGeneration, solution->getSpeciesId(), solution->getFitness());
+		simulation.setUniqueIdentifier(uniqueIdentifier);
+		SimulationFileManager sfm(std::make_shared<Simulation>(simulation), directoryPath);
+		sfm.saveElementsToJson();
 	}
 
 	void PopulationFileManager::saveChampions() const
@@ -468,6 +483,117 @@ namespace neat_dnfs
 		{
 			tools::logger::log(tools::logger::LogLevel::ERROR,
 				"Failed to open log file for structured per generation overview.");
+		}
+	}
+
+	namespace
+	{
+		// The same spelling the config uses for SelectionConstants.mode.
+		std::string selectionModeName(const SelectionMode mode)
+		{
+			return mode == SelectionMode::Pareto ? "pareto" : "scalar";
+		}
+
+		// JSON has no infinity: a boundary point's crowding distance is written as null.
+		nlohmann::json finiteOrNull(const double value)
+		{
+			return std::isfinite(value) ? nlohmann::json(value) : nlohmann::json(nullptr);
+		}
+
+		// One entry of a generation record's "individuals" array.
+		nlohmann::json toObjectivesJson(const Solution& solution)
+		{
+			const auto parameters = solution.getParameters();
+			return {
+				{"id", solution.getId()},
+				{"species", solution.getSpeciesId()},
+				{"fitness", parameters.fitness},
+				{"partialFitness", parameters.partialFitness},
+				{"objectives", parameters.objectives},
+				{"rank", parameters.paretoRank},
+				{"crowding", finiteOrNull(parameters.crowdingDistance)},
+				{"violation", parameters.constraintViolation}
+			};
+		}
+	}
+
+	void PopulationFileManager::saveObjectivesForGeneration() const
+	{
+		nlohmann::json individuals = nlohmann::json::array();
+		for (const auto& solution : population->solutions)
+		{
+			individuals.push_back(toObjectivesJson(*solution));
+		}
+
+		const nlohmann::json record = {
+			{"generation", population->parameters.currentGeneration},
+			{"mode", selectionModeName(SelectionConstants::mode)},
+			{"epsilon", SelectionConstants::dominanceEpsilon},
+			{"feasibilityFloor", SelectionConstants::feasibilityFloor},
+			{"objectiveGroups", SelectionConstants::objectiveGroups},
+			{"individuals", individuals},
+			{"archive", {
+				{"size", population->paretoArchive.size()},
+				{"acceptedThisGeneration", population->acceptedIntoArchive}
+			}}
+		};
+
+		const std::string directoryPath = fileDirectory + "/";
+		std::filesystem::create_directories(directoryPath);
+
+		std::ofstream logFile(directoryPath + "objectives.jsonl", std::ios::app);
+		if (logFile.is_open())
+		{
+			logFile << record.dump() << "\n";
+		}
+		else
+		{
+			tools::logger::log(tools::logger::LogLevel::ERROR,
+				"Failed to open objectives.jsonl for the per-generation objective record.");
+		}
+	}
+
+	void PopulationFileManager::saveParetoArchive() const
+	{
+		const std::string frontDirectory = fileDirectory + "pareto_front/";
+		std::filesystem::create_directories(frontDirectory);
+
+		nlohmann::json members = nlohmann::json::array();
+		for (const auto& entry : population->paretoArchive.members())
+		{
+			const auto alive = std::ranges::find_if(population->solutions,
+				[&entry](const SolutionPtr& solution) { return solution->getId() == entry.solutionId; });
+			const bool inFinalPopulation = alive != population->solutions.end();
+			if (inFinalPopulation)
+			{
+				saveSolutionPhenotype(*alive, frontDirectory);
+			}
+			members.push_back({
+				{"id", entry.solutionId},
+				{"generationFound", entry.generationFound},
+				{"objectives", entry.objectives},
+				{"partialFitness", entry.partials},
+				{"fitness", entry.fitness},
+				{"inFinalPopulation", inFinalPopulation}
+			});
+		}
+
+		const nlohmann::json record = {
+			{"mode", selectionModeName(SelectionConstants::mode)},
+			{"epsilon", SelectionConstants::dominanceEpsilon},
+			{"feasibilityFloor", SelectionConstants::feasibilityFloor},
+			{"objectiveGroups", SelectionConstants::objectiveGroups},
+			{"members", members}
+		};
+
+		std::ofstream archiveFile(fileDirectory + "pareto_archive.json");
+		if (archiveFile.is_open())
+		{
+			archiveFile << record.dump(4) << "\n";
+		}
+		else
+		{
+			tools::logger::log(tools::logger::LogLevel::ERROR, "Failed to open pareto_archive.json.");
 		}
 	}
 

@@ -3,7 +3,8 @@ import pandas as pd
 
 from .genome import summarize_best_solution_genome
 from .stats import compute_fitness_stats, compute_species_stats, compute_topology_stats, display_gen
-from .parsing import compute_population_kernel_usage, compute_species_meta, load_best_solution_architecture, load_overview
+from .parsing import compute_population_kernel_usage, compute_species_meta, load_best_solution_architecture, load_overview, load_pareto_population
+from .pareto import format_groups, numbered_columns, space_for_rows, summarize_generation
 from .experiment import compute_experiment_convergence, compute_experiment_totals
 
 def df_to_markdown_table(df: pd.DataFrame) -> str:
@@ -19,6 +20,53 @@ def df_to_markdown_table(df: pd.DataFrame) -> str:
         cells = [str(row[c]) for c in cols]
         rows.append("|" + "|".join(cells) + "|")
     return header + sep + "\n".join(rows)
+
+
+def pareto_markdown_lines(individuals: pd.DataFrame, recorded) -> list[str]:
+    """The run export's Pareto section: headline front metrics for the final generation, in the
+    run's own recorded objective space and settings (objectives.jsonl), or on the raw partials
+    with no epsilon or floor for an older run. Empty when the run has no objective data."""
+    if individuals.empty:
+        return []
+    if recorded is None:
+        groups, epsilon, floor = [], 0.0, 0.0
+        source = "per-individual partials in `statistics/` (the run predates `objectives.jsonl`); raw partials, ε 0, floor off"
+    else:
+        settings = recorded.settings
+        groups = [list(g) for g in settings["objective_groups"]]
+        epsilon, floor = float(settings["epsilon"]), float(settings["feasibility_floor"])
+        source = (
+            f"`objectives.jsonl`: {settings['mode']} selection, groups `{format_groups(groups) or 'none'}`, "
+            f"ε {epsilon:g}, floor {floor:g}"
+        )
+
+    final_generation = int(individuals["generation"].max())
+    members = individuals[individuals["generation"] == final_generation]
+    space = space_for_rows(members, groups, groups)
+    partials = members[numbered_columns(members, "p")].to_numpy()
+    summary = summarize_generation(space.values, partials, members["fitness"].to_numpy(), epsilon, floor)
+
+    hv_note = "" if summary["hypervolume_exact"] else " (Monte-Carlo estimate)"
+    hv_text = "none feasible" if summary["feasible_front0_size"] == 0 else f"{summary['hypervolume']:.4f}{hv_note}"
+    lines = [
+        "",
+        f"## Pareto (final generation {display_gen(final_generation)})",
+        "",
+        f"- Source: {source}",
+        f"- Objectives (m = {len(space.labels)}): {', '.join(space.labels)}",
+        f"- Front 0: {summary['front0_size']} of {len(members)} ({100 * summary['front0_share']:.1f}%)",
+        f"- Fronts: {summary['n_fronts']}",
+        f"- Hypervolume (feasible front 0): {hv_text}",
+        f"- Specialists in front 0: {100 * summary['specialist_share']:.1f}%",
+    ]
+    if floor > 0:
+        lines.append(f"- Feasible: {100 * summary['feasible_share']:.1f}%")
+    if recorded is not None and not recorded.archive.empty:
+        final_archive = recorded.archive[recorded.archive["generation"] == final_generation]
+        if not final_archive.empty:
+            lines.append(f"- Archive: {int(final_archive['size'].iloc[0])}")
+    lines.append(f"- Scalar-best individual: front {summary['scalar_best_rank']}")
+    return lines
 
 
 def export_run_markdown(run_dir_str: str, target_fitness: float = 0.9, out_path: str | None = None) -> str:
@@ -164,6 +212,8 @@ def export_run_markdown(run_dir_str: str, target_fitness: float = 0.9, out_path:
         lines.append("")
         lines.append(inter_md)
 
+
+    lines.extend(pareto_markdown_lines(*load_pareto_population(run_dir_str)))
 
     markdown_text = "\n".join(lines)
 

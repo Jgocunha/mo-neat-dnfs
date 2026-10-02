@@ -3,25 +3,26 @@ import streamlit as st
 
 from . import theme
 from .parsing import find_experiment_dirs, find_runs_with_overview, load_overview, run_picker_label
-from .views import render_cross_experiment_view, render_experiment_view, render_fitness_view, render_mutations_view, render_provenance_view, render_species_view, render_topology_view
+from .views import render_cross_experiment_view, render_experiment_view, render_fitness_view, render_mutations_view, render_pareto_view, render_provenance_view, render_species_view, render_topology_view
 from .report import export_experiment_markdown, export_run_markdown
 
 _ANALYSIS_DIR = Path(__file__).resolve().parents[1]
 
-# Single-run pages analyse one selected run (Fitness/Species/Topology/Mutations/Provenance);
+# Single-run pages analyse one selected run (Fitness/Species/Topology/Mutations/Pareto/Provenance);
 # comparison pages aggregate across runs (Experiment) or across experiments (Compare). The
 # sidebar's Experiment/Run pickers and export buttons are shown or hidden per page based on
 # which scope it belongs to.
-_SCOPE_RUN = {"Fitness", "Species", "Topology", "Mutations", "Provenance"}
+_SCOPE_RUN = {"Fitness", "Species", "Topology", "Mutations", "Pareto", "Provenance"}
 _SCOPE_EXPERIMENT = {"Experiment"}
 
-# icon + one-line tagline per page, shown as the page header so each of the 7 pages reads as
+# icon + one-line tagline per page, shown as the page header so each of the 8 pages reads as
 # its own place rather than an unlabeled continuation of the same screen.
 _PAGE_TAGLINES = {
     "Fitness": (":material/trending_up:", "Best and average fitness against your target, generation by generation."),
     "Species": (":material/hive:", "Speciation and genetic diversity as the population evolves."),
     "Topology": (":material/account_tree:", "How genome structure -- fields, connections, kernels -- grows and settles."),
     "Mutations": (":material/shuffle:", "Which mutations fire most often, and which ones actually pay off."),
+    "Pareto": (":material/scatter_plot:", "Trade-offs between objectives: the fronts, who sits on them, and how they move."),
     "Experiment": (":material/science:", "Every run in this experiment, aggregated into one convergence picture."),
     "Compare": (":material/compare_arrows:", "Several experiments side by side -- what actually moved the needle."),
     "Provenance": (":material/fingerprint:", "What built this run, and the machine it ran on."),
@@ -57,6 +58,10 @@ def _page_mutations():
     run_path = st.session_state["selected_run_path"]
     df = load_overview(run_path)
     render_mutations_view(df, tuple(df["generation"].tolist()), run_path)
+
+
+def _page_pareto():
+    render_pareto_view(st.session_state["selected_run_path"])
 
 
 def _page_provenance():
@@ -123,6 +128,7 @@ def main():
                 st.Page(_page_species, title="Species", icon=":material/hive:"),
                 st.Page(_page_topology, title="Topology", icon=":material/account_tree:"),
                 st.Page(_page_mutations, title="Mutations", icon=":material/shuffle:"),
+                st.Page(_page_pareto, title="Pareto", icon=":material/scatter_plot:"),
             ],
             "Across runs": [
                 st.Page(_page_experiment, title="Experiment", icon=":material/science:"),

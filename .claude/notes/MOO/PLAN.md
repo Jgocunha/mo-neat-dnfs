@@ -804,3 +804,96 @@ al.), NEAT-MODS μ+λ selection, NSGA-III, and objective names in config (the da
     (`.claude/notes/tsan-random-initial-topology-flake.md`).
 - The neat-dnfs PRs #117–#119 were then closed and their branches deleted; neat-dnfs is back to
   plain `main`.
+
+### Phase 4 (branch `feat/viz-pareto`)
+- **Python and C++ agree exactly.** `viz/pareto.py` re-ranks recorded objectives and reproduces the
+  run's own ranks, crowding distances and violations bit-for-bit. Checked on two XOR runs
+  (11 generations), one of them with groups `[[0,1,2],[3]]`, ε 0.02 and floor 0.1. The cyclic-ε
+  fallback and the zero-range crowding rule are mirrored deliberately.
+- **§3.5's "cache-schema version in the meta" already existed**: `cache._PARSER_VERSION` is part of
+  every fingerprint. It was bumped 2 → 3 (a test pins that an old-version meta is a miss).
+- **Older runs do not record fitness weights**, so a grouping typed for them uses plain means (the
+  probes did the same). A run's own recorded grouping uses its recorded, weighted objectives. The
+  page says which applies.
+- **Colour:** Okabe-Ito orange (`#E69F00`) fails the dataviz dark-mode lightness band, so species
+  colouring uses only blue, green and vermillion (they pass all-pairs CVD in both modes), and the
+  rest fold into a neutral. The heatmap uses blue ↔ vermillion with Lab interpolation (the default
+  path went through purple).
+- **Streamlit 1.52 bug:** `st.context.theme.type` reports "light" on a server started with
+  `--theme.base dark`, so `theme.theme_type()` now prefers the configured `theme.base`.
+- **The installed Python packages are older than `requirements.txt` asks** (Streamlit 1.52,
+  pandas 2.3, numpy 1.24); the code uses only APIs available in both.
+- The across-runs sections (Experiment: hypervolume per run and the union of final fronts; Compare:
+  final hypervolume with Mann–Whitney U) are **opt-in toggles**, because the first use scans every
+  run's `statistics/`. Compare skips experiments whose partial count differs from the first one
+  (another task, so a non-comparable hypervolume).
+- Verified with pytest (158), headless `AppTest` runs of every page and section (old AND run raw
+  and grouped, new XOR runs, invalid grouping, Experiment, Compare, switching objective space), and
+  Playwright screenshots in light and dark mode against `sandbox/proto_pareto_views.png`. Grouped
+  AND gen 25 shows front 0 = 46/300 (15.3 %) and specialists 28.3 %; raw shows 199/300 and 70.4 %.
+  Both match §1.2–1.3.
+
+### Phase 5 (branch `feat/pareto-selection`, stacked on `feat/viz-pareto`)
+- **Build and test numbers.** With `CMAKE_PREFIX_PATH` pointing at neat-dnfs's own `deps/`
+  install trees, rather than the stale system `dnf-composer`, the 3 known local failures are
+  gone. The fast lane is 241/241 on `feat/viz-pareto` and 259/259 with Phase 5's 18 new tests.
+  The machine-specific details are in `.claude/local-notes/build-against-neat-dnfs-deps.md`.
+- **Row 9 (eviction) meets unranked offspring.** `preserveGlobalBestSolution` runs after
+  crossover, so `solutions` is mostly fresh offspring, with `paretoRank == -1`. A plain
+  `rank <` comparator would make them the *best*. Resolution: `Solution::isPreferredTo` sorts an
+  unranked solution behind every front. In scalar mode offspring have fitness 0, so nothing
+  changes there.
+- **Row 5 also feeds elitism.** `hasFitnessImprovedOverTheLastGenerations()` does two jobs. It
+  updates `previousBestSolution`/`previousBestFitness`, which `preserveGlobalBestSolution` and
+  `validateElitism` read, and it drives the stagnation counter. Replacing its condition wholesale
+  would have changed elitism, against D4. Resolution: the scalar-best bookkeeping always runs,
+  and only the stagnation signal switches to the archive in Pareto mode.
+- **Row 6, `getBestActiveSpecies`, has an implicit "fitness > 0" bar** (its running best starts
+  at 0.0). Scalar mode keeps it; Pareto mode has no equivalent, so any champion qualifies.
+- **`selectionFitness` in scalar mode** is provided by the accessor
+  `Solution::getSelectionFitness()`, which returns `fitness` in scalar mode. The ranking writes the
+  rank-derived value in both modes (scalar mode ranks for `objectives.jsonl`), but scalar mode
+  never reads it.
+- **"While the archive is still empty"** is evaluated after the generation's offers. If anything
+  was accepted, the archive is non-empty and the accepted-ids signal already fires.
+  `bestViolationSeen()` is read before the offers, as the Phase 1 notes require.
+- **Species improvement** maps the accepted ids to each species' *current* members inside
+  `speciate()`, after `assignToSpecies`, and never reads `ParetoArchiveEntry::speciesId`. A test
+  makes that id deliberately stale.
+- **`Species::assignChampion(bool)`** is a new overload in which the caller supplies the
+  improvement. The no-argument overload keeps the scalar fitness test, and both sort by the
+  comparator.
+- **The DEBUG sentence is compiled out of Release builds** (`.claude/notes/debug-logs-compiled-out-in-release.md`),
+  so `setMinLogLevel(DEBUG)` alone shows nothing. It is logged from `speciate()`, not
+  `rankObjectives()`, because the species counts are only known there.
+- **Instrumented `and` run** (pop 300, 40 generations, groups `0,2|1,3,4|5,6,7`, ε 0.01, floor 0.1,
+  target unreachable; the line was raised to INFO in a scratch build):
+  - generation 0 has nothing feasible; front 0 is the 92 solutions with the lowest violation.
+  - The archive reaches 1–3 points by generation 2. From generation 25 it is a single point,
+    (0.978, 1.0, 0.994), with fitness 0.995, which dominates every later front within ε. There is
+    no churn.
+  - The feasible share is 19.7 % at generation 5 and 20–50 % from then on. That is at or above
+    §1.5's 2.3 % / 21 %, which came from a scalar run.
+  - Front-0 specialists (any raw partial below 0.1): 0 from generation 1 onwards.
+  - Stagnation fires. Population-level stagnation triggered once (generation 35, after 10
+    generations with nothing accepted). Species-level stagnation logged 43 warnings and caused 23
+    reassignments.
+  - Front 0 grows to 20 % of the population late in the run: many near-clones of the archived
+    point are tied within ε.
+- **`pareto_front/` can be empty, which is a real gap in the §3.4 design.** The final population
+  is post-reproduction, mostly unevaluated offspring. An archive member is saved only while it is
+  still a champion or the preserved best. In the 40-generation `and` run, the only archive member
+  was gone by the end, so `pareto_front/` was empty; the 7-generation run kept its member. Phase 5
+  implements §3.4 as written. Keeping a genome copy in `ParetoArchiveEntry` would let every
+  member's phenotype be saved. That is a decision for the user, possibly as part of Phase 6.
+- **`pareto_archive.json`** holds the selection settings and, per member: `id`, `generationFound`,
+  `objectives`, `partialFitness`, `fitness`, and `inFinalPopulation`, which says whether a
+  phenotype was saved. It leaves out the stale species id. It is written whenever the mode is
+  Pareto, with no `saveXxx` flag.
+- **`hasFitnessImproved`** in `overview.jsonl` and `per_generation_overview.txt` reports the archive
+  signal in Pareto mode. The key and format are unchanged. The value lags by one generation in
+  both modes, since upkeep writes the file before `reproduceAndSelect` updates the value. That lag
+  predates this work.
+- `PopulationFileManager::saveSolutionPhenotype` was extracted from
+  `saveAllSolutionsWithFitnessAbove` so that `pareto_front/` reuses it. The output of
+  `best_solutions/last_generation/` is unchanged.

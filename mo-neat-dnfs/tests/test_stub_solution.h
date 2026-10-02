@@ -1,4 +1,5 @@
 #pragma once
+#include <algorithm>
 #include <atomic>
 #include <thread>
 #include <stdexcept>
@@ -141,6 +142,40 @@ private:
     void testPhenotype() override
     {
         parameters.fitness = fitnessToReport;
+    }
+
+    void createPhenotypeEnvironment() override {}
+};
+
+// Stand-in that reports fixed partial fitnesses under the "and" task's eight
+// fitness weights, for checking how Solution::evaluate() derives the
+// objective vector without running a real DNF simulation.
+class FixedPartialsSolution final : public Solution
+{
+public:
+    FixedPartialsSolution(const SolutionTopology& topology, std::vector<double> partials)
+        : Solution(topology), partialsToReport(std::move(partials))
+    {
+        name = "FixedPartials";
+        loadFitnessWeights("and", partialsToReport.size());
+    }
+
+    SolutionPtr clone() const override
+    {
+        return std::make_shared<FixedPartialsSolution>(initialTopology, partialsToReport);
+    }
+
+    SolutionPtr copy() const override
+    {
+        return clone();
+    }
+
+private:
+    std::vector<double> partialsToReport;
+
+    void testPhenotype() override
+    {
+        parameters.partialFitness = partialsToReport;
     }
 
     void createPhenotypeEnvironment() override {}
@@ -984,6 +1019,85 @@ private:
     {
         initSimulation();
         parameters.fitness = negativePreShapednessAtPosition("nf 1", static_cast<double>(DimensionConstants::xSize));
+    }
+
+    void createPhenotypeEnvironment() override {}
+};
+
+// Stand-in that reports fixed partials and a fixed fitness with no fitness
+// weights or objective groups, so its objective vector is its partials. Used to
+// place solutions at chosen points of objective space for the Pareto-mode
+// comparator, crossover and improvement-signal tests.
+class FixedObjectivesSolution final : public Solution
+{
+public:
+    FixedObjectivesSolution(const SolutionTopology& topology, std::vector<double> partials, const double fitness)
+        : Solution(topology), partialsToReport(std::move(partials)), fitnessToReport(fitness)
+    {
+        name = "FixedObjectives";
+    }
+
+    SolutionPtr clone() const override
+    {
+        return std::make_shared<FixedObjectivesSolution>(initialTopology, partialsToReport, fitnessToReport);
+    }
+
+    SolutionPtr copy() const override
+    {
+        return clone();
+    }
+
+private:
+    std::vector<double> partialsToReport;
+    double fitnessToReport;
+
+    void testPhenotype() override
+    {
+        parameters.partialFitness = partialsToReport;
+        parameters.fitness = fitnessToReport;
+    }
+
+    void createPhenotypeEnvironment() override {}
+};
+
+// Stand-in whose two partials conflict and follow its genome deterministically:
+// more field genes raise the first, more connection genes lower the second.
+// Fitness is their mean. Evolving it gives a real, genome-driven trade-off for
+// the Pareto-mode integration test without running a DNF simulation.
+class ObjectiveStubSolution final : public Solution
+{
+public:
+    explicit ObjectiveStubSolution(const SolutionTopology& topology)
+        : Solution(topology)
+    {
+        name = "ObjectiveStub";
+    }
+
+    ObjectiveStubSolution(const SolutionTopology& initialTopology, const dnf_composer::Simulation& phenotype)
+        : Solution(initialTopology, phenotype)
+    {
+        name = "ObjectiveStub";
+    }
+
+    SolutionPtr clone() const override
+    {
+        ObjectiveStubSolution solution(initialTopology);
+        return std::make_shared<ObjectiveStubSolution>(solution);
+    }
+
+    SolutionPtr copy() const override
+    {
+        ObjectiveStubSolution solution(initialTopology, phenotype);
+        return std::make_shared<ObjectiveStubSolution>(solution);
+    }
+
+private:
+    void testPhenotype() override
+    {
+        const double growth = std::min(1.0, static_cast<double>(getNumFieldGenes()) / 10.0);
+        const double economy = std::max(0.0, 1.0 - static_cast<double>(getNumConnectionGenes()) / 10.0);
+        parameters.partialFitness = { growth, economy };
+        parameters.fitness = 0.5 * (growth + economy);
     }
 
     void createPhenotypeEnvironment() override {}

@@ -8,6 +8,7 @@ import networkx as nx
 
 from . import theme
 from .theme import CATEGORICAL_CYCLE, COLOR_AVG, COLOR_BEST, COLOR_FAILURE, COLOR_STRUCTURAL_CHANGE, COLOR_SUCCESS, COLOR_TARGET
+from .theme import DIVERGING_MIDPOINT, DIVERGING_NEGATIVE, DIVERGING_POSITIVE, NEUTRAL_STRONG, NEUTRAL_WEAK, SPECIES_SLOTS, TEXT_INK
 
 theme.apply_plot_style()
 theme.register_altair_theme()
@@ -880,8 +881,13 @@ def chart_architecture_complexity_scatter(hidden: list, connections: list, label
     return alt.layer(points, text).properties(title="Architecture complexity (successful runs)", height=theme.CHART_HEIGHT_TALL)
 
 
-def chart_cross_experiment_boxplot(plottable: dict):
-    """plottable: {experiment_name: [generations_to_threshold, ...]}."""
+def chart_cross_experiment_boxplot(
+    plottable: dict,
+    title: str = "Convergence speed across experiments",
+    y_title: str = "generations to threshold",
+):
+    """plottable: {experiment_name: [value, ...]} -- generations to threshold by default; the
+    Pareto comparison passes final hypervolumes with its own title."""
     rows = [{"experiment": name, "generations": v} for name, vals in plottable.items() for v in vals]
     df = pd.DataFrame(rows)
     order = list(plottable.keys())
@@ -890,8 +896,213 @@ def chart_cross_experiment_boxplot(plottable: dict):
         .mark_boxplot(color=CATEGORICAL_CYCLE[0], outliers=False)
         .encode(
             x=alt.X("experiment:N", title=None, sort=order),
-            y=alt.Y("generations:Q", title="generations to threshold"),
+            y=alt.Y("generations:Q", title=y_title),
         )
-        .properties(title="Convergence speed across experiments", height=theme.CHART_HEIGHT_TALL)
+        .properties(title=title, height=theme.CHART_HEIGHT_TALL)
     )
     return chart
+
+
+# ---------------------------------------------------------------------------------------------
+# Pareto page. Every chart takes `mode` ("light"/"dark", from theme.theme_type()) because its
+# neutrals are per mode; the charts themselves stay pure so tests can build them.
+# ---------------------------------------------------------------------------------------------
+
+_RANK_CLASSES = ["front 0", "fronts 1-3", "front 4+"]
+_OTHER_SPECIES = "other species"
+_PROJECTION_LABEL = "front 0, 2-D projection"
+# Objectives are maximised and bounded by 1, so 1 stays the axis ceiling; the floor follows the
+# data, since late-run populations crowd into the top few percent of the range.
+_OBJECTIVE_SCALE = alt.Scale(zero=False, domainMax=1)
+
+
+def _rank_class(rank: int) -> str:
+    if rank == 0:
+        return _RANK_CLASSES[0]
+    return _RANK_CLASSES[1] if rank <= 3 else _RANK_CLASSES[2]
+
+
+def _species_classes(species: pd.Series) -> tuple[pd.Series, list[str]]:
+    """The largest len(SPECIES_SLOTS) species keep their own label; the rest fold into one."""
+    largest = species.value_counts().index[: len(SPECIES_SLOTS)].tolist()
+    labels = [f"species {s}" for s in sorted(largest)]
+    classes = species.map(lambda s: f"species {s}" if s in largest else _OTHER_SPECIES)
+    return classes, labels
+
+
+def _population_tooltip(x_title: str, y_title: str) -> list:
+    return [
+        alt.Tooltip("id:Q", title="solution"),
+        alt.Tooltip("species:Q"),
+        alt.Tooltip("fitness:Q", format=".4f"),
+        alt.Tooltip("rank:Q", title="front"),
+        alt.Tooltip("x:Q", title=x_title, format=".4f"),
+        alt.Tooltip("y:Q", title=y_title, format=".4f"),
+    ]
+
+
+def chart_pareto_scatter(population: pd.DataFrame, staircase: pd.DataFrame, x_title: str, y_title: str,
+                         color_by: str, mode: str):
+    """The whole population on two objectives. Colored by m-D front (front 0 in the accent,
+    later fronts in receding neutrals) or by species (the largest three, the rest neutral).
+    Infeasible individuals are hollow. The dashed staircase is front 0 re-computed in these two
+    dimensions only -- labelled as such, since a projection of an m-D front is not a front."""
+    df = population.copy()
+    if color_by == "species":
+        df["color_class"], domain = _species_classes(df["species"])
+        domain = domain + [_OTHER_SPECIES]
+        color_range = SPECIES_SLOTS[: len(domain) - 1] + [NEUTRAL_WEAK[mode]]
+        legend_title = "species"
+    else:
+        df["color_class"] = df["rank"].map(_rank_class)
+        domain = _RANK_CLASSES
+        color_range = [COLOR_BEST, NEUTRAL_STRONG[mode], NEUTRAL_WEAK[mode]]
+        legend_title = "m-D front"
+    df["feasibility"] = df["feasible"].map({True: "feasible", False: "infeasible (hollow)"})
+
+    color = alt.Color("color_class:N", title=legend_title, scale=alt.Scale(domain=domain, range=color_range))
+    points = (
+        alt.Chart(df)
+        .mark_point(size=64, strokeWidth=1.5)
+        .encode(
+            x=alt.X("x:Q", title=x_title, scale=_OBJECTIVE_SCALE),
+            y=alt.Y("y:Q", title=y_title, scale=_OBJECTIVE_SCALE),
+            color=color,
+            fill=alt.condition("datum.feasible", color, alt.value("transparent")),
+            order=alt.Order("rank:Q", sort="descending"),
+            tooltip=_population_tooltip(x_title, y_title) + [alt.Tooltip("feasibility:N")],
+        )
+    )
+    step = pd.DataFrame(staircase).assign(series=_PROJECTION_LABEL)
+    line = (
+        alt.Chart(step)
+        .mark_line(interpolate="step-before", strokeDash=[5, 3], strokeWidth=2, color=COLOR_BEST)
+        .encode(
+            x="x:Q",
+            y="y:Q",
+            opacity=alt.Opacity("series:N", title=None, legend=alt.Legend(symbolDash=[5, 3], symbolStrokeColor=COLOR_BEST, labelLimit=240)),
+        )
+    )
+    return alt.layer(points, line).properties(title="Population on two objectives", height=theme.CHART_HEIGHT_TALL).interactive()
+
+
+def chart_front0_scatter_matrix(front0: pd.DataFrame, labels: list[str]):
+    """Every pair of objectives for the front-0 members (one series, one color)."""
+    return (
+        alt.Chart(front0)
+        .mark_circle(size=40, color=COLOR_BEST, opacity=0.7)
+        .encode(
+            x=alt.X(alt.repeat("column"), type="quantitative", scale=_OBJECTIVE_SCALE),
+            y=alt.Y(alt.repeat("row"), type="quantitative", scale=_OBJECTIVE_SCALE),
+            tooltip=[alt.Tooltip("id:Q", title="solution")],
+        )
+        .properties(width=110, height=110)
+        .repeat(row=labels, column=labels)
+    )
+
+
+def chart_parallel_coordinates(long_df: pd.DataFrame, axes: list[str], mode: str):
+    """Front 0 on every raw partial, one line per individual, in a receding neutral; the scalar
+    (weighted-sum) best individual in the accent. Lines that touch 0 on an axis are the
+    degenerate specialists."""
+    df = long_df.assign(series=long_df["scalar_best"].map({True: "scalar best", False: "front 0 member"}))
+    base = alt.Chart(df).encode(
+        x=alt.X("axis:N", title=None, sort=axes, axis=alt.Axis(labelAngle=0)),
+        y=alt.Y("value:Q", title="partial fitness", scale=alt.Scale(domain=[0, 1])),
+        detail="id:N",
+        tooltip=[alt.Tooltip("id:Q", title="solution"), alt.Tooltip("axis:N"), alt.Tooltip("value:Q", format=".4f")],
+    )
+    members = base.transform_filter("!datum.scalar_best").mark_line(strokeWidth=1, opacity=0.35, color=NEUTRAL_STRONG[mode])
+    best = base.transform_filter("datum.scalar_best").mark_line(strokeWidth=2.5, color=COLOR_BEST, point=True)
+    label = (
+        alt.Chart(df[df["scalar_best"] & (df["axis"] == axes[-1])])
+        .mark_text(align="left", dx=8, color=COLOR_BEST)
+        .encode(x=alt.X("axis:N", sort=axes), y="value:Q", text="series:N")
+    )
+    return alt.layer(members, best, label).properties(title="Front 0 on every raw partial", height=theme.CHART_HEIGHT_TALL)
+
+
+def _generation_scale(mode: str) -> alt.Scale:
+    # One hue, light->dark, with the latest generation the most prominent: darkest on a light
+    # surface, lightest on a dark one. The ramp starts at 30% so early generations stay visible.
+    return alt.Scale(scheme=alt.SchemeParams(name="blues", extent=[0.3, 1.0]), reverse=mode == "dark")
+
+
+def chart_front_evolution(points: pd.DataFrame, steps: pd.DataFrame, x_title: str, y_title: str, mode: str):
+    """Front 0 of sampled generations on two objectives, colored by generation."""
+    color = alt.Color("gen_display:Q", title="generation", scale=_generation_scale(mode))
+    dots = alt.Chart(points).mark_circle(size=64).encode(
+        x=alt.X("x:Q", title=x_title, scale=_OBJECTIVE_SCALE),
+        y=alt.Y("y:Q", title=y_title, scale=_OBJECTIVE_SCALE),
+        color=color,
+        tooltip=[alt.Tooltip("gen_display:Q", title="generation"), alt.Tooltip("x:Q", title=x_title, format=".4f"), alt.Tooltip("y:Q", title=y_title, format=".4f")],
+    )
+    lines = alt.Chart(steps).mark_line(interpolate="step-before", strokeWidth=2).encode(
+        x="x:Q", y="y:Q", color=color, detail="gen_display:Q"
+    )
+    return alt.layer(lines, dots).properties(title="Front 0 over generations (2-D projection)", height=theme.CHART_HEIGHT_TALL).interactive()
+
+
+def chart_pareto_metrics(metrics_long: pd.DataFrame):
+    """Small multiples, one per metric, each on its own y-scale -- never a shared or dual axis."""
+    return (
+        alt.Chart(metrics_long)
+        .mark_line(strokeWidth=2, color=COLOR_BEST, point=alt.OverlayMarkDef(size=30, color=COLOR_BEST))
+        .encode(
+            x=alt.X("gen_display:Q", title="generation"),
+            y=alt.Y("value:Q", title=None),
+            tooltip=[alt.Tooltip("metric:N"), alt.Tooltip("gen_display:Q", title="generation"), alt.Tooltip("value:Q", format=".4f")],
+        )
+        .properties(width=210, height=150)
+        .facet(facet=alt.Facet("metric:N", title=None), columns=3)
+        .resolve_scale(y="independent")
+    )
+
+
+def chart_objective_correlation(corr_long: pd.DataFrame, labels: list[str], mode: str):
+    """Pearson correlation between objectives across the population, diverging around 0:
+    negative (blue) cells are genuine trade-offs, strongly positive (vermillion) cells are
+    redundant objectives. The diagonal (always +1) is left blank so it cannot dominate, and so
+    are objectives with no variance."""
+    # Lab interpolation: the default path from a dark-gray midpoint to vermillion passes through
+    # purple, which reads as a third hue.
+    scale = alt.Scale(domain=[-1, 0, 1], range=[DIVERGING_NEGATIVE, DIVERGING_MIDPOINT[mode], DIVERGING_POSITIVE], interpolate="lab")
+    corr_long = corr_long[corr_long["row"] != corr_long["column"]]
+    cells = alt.Chart(corr_long).mark_rect(stroke=DIVERGING_MIDPOINT[mode], strokeWidth=1).encode(
+        x=alt.X("column:N", title=None, sort=labels, axis=alt.Axis(labelAngle=-45)),
+        y=alt.Y("row:N", title=None, sort=labels),
+        color=alt.Color("correlation:Q", title="correlation", scale=scale),
+        tooltip=[alt.Tooltip("row:N"), alt.Tooltip("column:N"), alt.Tooltip("correlation:Q", format="+.2f")],
+    )
+    text = alt.Chart(corr_long).mark_text(fontSize=11, color=TEXT_INK[mode]).encode(
+        x=alt.X("column:N", sort=labels), y=alt.Y("row:N", sort=labels), text=alt.Text("correlation:Q", format="+.2f")
+    )
+    # Step sizing: a fixed width/height on a discrete-axis layer collapses under
+    # st.altair_chart(width="content"); a per-cell step keeps cells readable at any m.
+    return alt.layer(cells, text).properties(title="Objective conflict", width=alt.Step(72), height=alt.Step(44))
+
+
+def chart_hypervolume_by_run(hv_df: pd.DataFrame, estimate: bool):
+    """Final-generation hypervolume of every run in an experiment (one dot per run)."""
+    title = "Final hypervolume per run" + (" (Monte-Carlo estimate)" if estimate else "")
+    box = alt.Chart(hv_df).mark_boxplot(color=COLOR_BEST, opacity=0.35, outliers=False, size=40).encode(y=alt.Y("hypervolume:Q"))
+    dots = alt.Chart(hv_df).mark_circle(size=64, color=COLOR_BEST).encode(
+        y=alt.Y("hypervolume:Q", title="hypervolume"),
+        tooltip=[alt.Tooltip("run:N"), alt.Tooltip("hypervolume:Q", format=".4f")],
+    )
+    return alt.layer(box, dots).properties(title=title, height=theme.CHART_HEIGHT, width=160)
+
+
+def chart_front_union(points: pd.DataFrame, union_staircase: pd.DataFrame, x_title: str, y_title: str, mode: str):
+    """Every run's final front 0 on two objectives (one neutral series), with the 2-D front of
+    their union in the accent."""
+    dots = alt.Chart(points).mark_circle(size=40, color=NEUTRAL_STRONG[mode], opacity=0.7).encode(
+        x=alt.X("x:Q", title=x_title, scale=_OBJECTIVE_SCALE),
+        y=alt.Y("y:Q", title=y_title, scale=_OBJECTIVE_SCALE),
+        tooltip=[alt.Tooltip("run:N"), alt.Tooltip("x:Q", title=x_title, format=".4f"), alt.Tooltip("y:Q", title=y_title, format=".4f")],
+    )
+    step = pd.DataFrame(union_staircase).assign(series="2-D front of the union")
+    line = alt.Chart(step).mark_line(interpolate="step-before", strokeWidth=2, color=COLOR_BEST).encode(
+        x="x:Q", y="y:Q", opacity=alt.Opacity("series:N", title=None)
+    )
+    return alt.layer(dots, line).properties(title="Final fronts across runs", height=theme.CHART_HEIGHT_TALL).interactive()

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <string>
 
 #include <dnf_composer/simulation/simulation_file_manager.h>
@@ -7,6 +8,7 @@
 namespace neat_dnfs
 {
 	class Population;
+	class Solution;
 
 	/// @brief Handles all on-disk persistence for a Population run.
 	///
@@ -26,7 +28,8 @@ namespace neat_dnfs
 		void saveOverviewForGeneration() const;
 		/// @brief Writes the remaining per-generation artifacts. Called after generation/age updates.
 		void savePerGenerationData() const;
-		/// @brief Writes end-of-run artifacts (final solutions, timestamps, champions).
+		/// @brief Writes end-of-run artifacts (final solutions, timestamps, champions, and in
+		/// Pareto mode the archive).
 		void saveEndOfRunData() const;
 
 #ifdef NEAT_DNFS_PROFILE
@@ -46,6 +49,16 @@ namespace neat_dnfs
 
 	private:
 		void saveAllSolutionsWithFitnessAbove(double fitness) const;
+		/// @brief Saves @p solution's phenotype elements (and coupling weights) as JSON.
+		/// @param solution The solution to save.
+		/// @param directoryPath Directory the elements are written to.
+		void saveSolutionPhenotype(const std::shared_ptr<Solution>& solution, const std::string& directoryPath) const;
+		/// @brief Writes pareto_archive.json at the end of a Pareto-mode run: the selection
+		/// settings, then every archive member's id, generation found, objectives, partials,
+		/// fitness and whether it is still in the final population. Saves the phenotypes of
+		/// those still alive under pareto_front/; a member that died earlier has no genome
+		/// left to build one from, so only its archive record remains.
+		void saveParetoArchive() const;
 		void saveChampions() const;
 		void saveTimestampsAndDuration() const;
 		void saveRunMetadata() const;
@@ -54,6 +67,12 @@ namespace neat_dnfs
 		/// @brief Appends one JSON object for the current generation to overview.jsonl,
 		/// alongside (never replacing) the prose per_generation_overview.txt.
 		void savePerGenerationOverviewJson() const;
+		/// @brief Appends one JSON object for the current generation to objectives.jsonl:
+		/// the selection settings, every solution's partials, objectives, Pareto rank,
+		/// crowding distance and constraint violation, and the archive's size and
+		/// this generation's accepted ids. An infinite crowding distance (a boundary
+		/// point) is written as null, since JSON has no infinity.
+		void saveObjectivesForGeneration() const;
 		void saveBestSolutionOfEachGeneration() const;
 		void saveChampionsOfEachGeneration() const;
 		void savePerGenerationStatistics() const;
