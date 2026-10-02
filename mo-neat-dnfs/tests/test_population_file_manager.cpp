@@ -599,3 +599,55 @@ TEST_CASE("PopulationFileManager keeps running when objectives.jsonl cannot be o
 
     std::filesystem::remove_all(runDirectory);
 }
+
+namespace
+{
+    // Reports a fixed fitness under its own solution name, so a test can own a data/<name>/
+    // folder that no other test writes to.
+    class BackToBackSolution final : public Solution
+    {
+    public:
+        explicit BackToBackSolution(const SolutionTopology& topology) : Solution(topology)
+        {
+            name = "FixedFitnessBackToBack";
+        }
+
+        SolutionPtr clone() const override { return std::make_shared<BackToBackSolution>(initialTopology); }
+        SolutionPtr copy() const override { return std::make_shared<BackToBackSolution>(initialTopology); }
+
+    private:
+        void testPhenotype() override { parameters.fitness = 0.5; }
+        void createPhenotypeEnvironment() override {}
+    };
+}
+
+TEST_CASE("PopulationFileManager gives runs started in the same second their own directories", "[PopulationFileManager]")
+{
+    // A run this small finishes well inside a second, and run directories are named to the
+    // second, so back-to-back runs would otherwise write into one directory.
+    const std::string solutionName = "FixedFitnessBackToBack";
+    const auto preExisting = existingRunDirs(solutionName);
+    constexpr int runs = 3;
+    for (int run = 0; run < runs; ++run)
+    {
+        resetGlobalState();
+        const PopulationParameters parameters(2, 1, 1.1);
+        Population population(parameters, std::make_shared<BackToBackSolution>(makeTopology(1, 1)));
+        population.initialize();
+        REQUIRE_NOTHROW(population.evolve());
+    }
+
+    std::vector<std::filesystem::path> created;
+    for (const auto& entry : std::filesystem::directory_iterator(paths::dataRoot() / "data" / solutionName))
+    {
+        if (entry.is_directory() && !preExisting.contains(entry.path().filename().string()))
+        {
+            created.push_back(entry.path());
+        }
+    }
+    for (const auto& directory : created)
+    {
+        std::filesystem::remove_all(directory);
+    }
+    REQUIRE(created.size() == runs);
+}

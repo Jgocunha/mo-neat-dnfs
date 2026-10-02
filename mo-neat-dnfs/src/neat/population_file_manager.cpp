@@ -32,6 +32,18 @@ namespace neat_dnfs
 		{
 			return std::format("solution {} generation {} species {} fitness {:f}", id, generation, speciesId, fitness);
 		}
+
+		// Run directories are named to the second, and a short run can start in the same second
+		// as the one before it; without a suffix the two would write into one directory.
+		std::filesystem::path uniqueRunDirectory(const std::filesystem::path& parent, const std::string& timestamp)
+		{
+			std::filesystem::path candidate = parent / timestamp;
+			for (int copy = 2; std::filesystem::exists(candidate); ++copy)
+			{
+				candidate = parent / std::format("{} ({})", timestamp, copy);
+			}
+			return candidate;
+		}
 	}
 
 	PopulationFileManager::PopulationFileManager(const Population& population)
@@ -122,7 +134,7 @@ namespace neat_dnfs
 		std::array<char, 100> timeBuffer{};
 		(void)std::strftime(timeBuffer.data(), timeBuffer.size(), "%Y-%m-%d %Hh%Mm%Ss", &localTime);
 
-		fileDirectory = (paths::dataRoot() / "data" / solutionName / timeBuffer.data()).generic_string() + "/";
+		fileDirectory = uniqueRunDirectory(paths::dataRoot() / "data" / solutionName, timeBuffer.data()).generic_string() + "/";
 		std::filesystem::create_directories(fileDirectory); // Ensure directory exist
 	}
 
@@ -498,6 +510,12 @@ namespace neat_dnfs
 			return mode == SelectionMode::Pareto ? "pareto" : "scalar";
 		}
 
+		// The same spelling the config uses for SelectionConstants.frontTieBreak.
+		std::string frontTieBreakName(const FrontTieBreak tieBreak)
+		{
+			return tieBreak == FrontTieBreak::Fitness ? "fitness" : "crowding";
+		}
+
 		// The same spelling the config uses for SelectionConstants.stagnationSignal.
 		std::string stagnationSignalName(const StagnationSignal signal)
 		{
@@ -542,6 +560,7 @@ namespace neat_dnfs
 			{"archiveEpsilon", SelectionConstants::archiveEpsilon},
 			{"violationEpsilon", SelectionConstants::violationEpsilon},
 			{"stagnationSignal", stagnationSignalName(SelectionConstants::stagnationSignal)},
+			{"frontTieBreak", frontTieBreakName(SelectionConstants::frontTieBreak)},
 			{"feasibilityFloor", SelectionConstants::feasibilityFloor},
 			{"objectiveGroups", SelectionConstants::objectiveGroups},
 			{"individuals", individuals},
@@ -614,6 +633,7 @@ namespace neat_dnfs
 			{"archiveEpsilon", SelectionConstants::archiveEpsilon},
 			{"violationEpsilon", SelectionConstants::violationEpsilon},
 			{"stagnationSignal", stagnationSignalName(SelectionConstants::stagnationSignal)},
+			{"frontTieBreak", frontTieBreakName(SelectionConstants::frontTieBreak)},
 			{"feasibilityFloor", SelectionConstants::feasibilityFloor},
 			{"objectiveGroups", SelectionConstants::objectiveGroups},
 			{"members", members}

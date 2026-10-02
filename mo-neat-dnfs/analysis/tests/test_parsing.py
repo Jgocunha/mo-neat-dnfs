@@ -770,3 +770,11 @@ def test_parse_run_overview_accepts_both_spec_separators(tmp_path, line):
 
     assert metrics is not None
     assert metrics["best_solution_species_id"] == 12
+
+
+def test_prettify_run_timestamp_keeps_a_same_second_suffix():
+    from viz.parsing import prettify_run_timestamp
+
+    assert prettify_run_timestamp("2026-08-12 19h50m57s") == "Aug 12, 19:50"
+    assert prettify_run_timestamp("2026-08-12 19h50m57s (2)") == "Aug 12, 19:50 (2)"
+    assert prettify_run_timestamp("not a timestamp") == "not a timestamp"

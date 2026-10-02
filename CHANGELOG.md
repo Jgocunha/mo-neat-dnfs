@@ -40,9 +40,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New, optional `SelectionConstants.violationEpsilon`: two infeasible solutions whose total shortfall below the feasibility floor differs by less than it are compared on their objectives, so noise in one failing partial no longer orders the whole population. Default 0 (Deb's exact rule).
   - New, optional `SelectionConstants.archiveEpsilon`: the ε of the archives and of the improvement signals, separate from the ranking's `dominanceEpsilon`. When absent it takes `dominanceEpsilon`'s value.
   - New, optional `SelectionConstants.stagnationSignal`: `"front"` (default) judges progress by the archive and each species' own front; `"fitness"` gives Pareto mode exactly scalar mode's stagnation rules, so the two modes differ only in how they rank. The front signals filter out re-evaluation noise that keeps scalar mode's stagnation from firing, and on XOR the resulting stagnation culled the species carrying new structure.
-  - `objectives.jsonl` and `pareto_archive.json` record the new tolerances and the stagnation signal, and the Pareto page ranks with the recorded tie band.
+  - New, optional `SelectionConstants.frontTieBreak`: `"crowding"` (default, NSGA-II) or `"fitness"`, which orders solutions on the same front by weighted fitness, pushing toward every objective being high at once instead of spreading along the front.
+  - `objectives.jsonl` and `pareto_archive.json` record the new tolerances, the stagnation signal and the tie-break, and the Pareto page ranks with the recorded tie band.
 - **A Scalar vs Pareto page in the visualizer.** It pairs every task's scalar experiment with its Pareto arm(s) and shows success rate (every partial above the target), the best solution's lowest partial and fitness over generations, the final best generalist and feasible hypervolume, and a per-task verdict (Fisher's exact test on success, then Mann-Whitney U).
 - The GitHub Pages `docs` job is muted until Pages is enabled for this repository.
+- Fixed: two runs that started in the same second wrote into the same `data/<Task>/<timestamp>/` directory. The second now gets `<timestamp> (2)`, and so on; the visualizer labels it accordingly.
 
 ### Changed
 - **Synced with neat-dnfs #120** (validate and retune task fitness, add the HRI packaging task). In this repository:
