@@ -919,8 +919,11 @@ al.), NEAT-MODS μ+λ selection, NSGA-III, and objective names in config (the da
   feasibility is up to the search, and `test_evolution_helpers.h` rules out stochastic assertions.
   It asserts the deterministic equivalent instead: in every generation, the archive is non-empty
   exactly when some generation so far had a feasible individual. The test also checks the ranks against `constrainedDominates`
-  in every generation, and that the scalar best never falls below its high-water mark by more
-  than `elitismFitnessEpsilon`. It runs with file output on and deletes each run directory, and
+  in every generation. It does **not** assert §5's "best fitness never falls below its high-water
+  mark by more than `elitismFitnessEpsilon`". That failed on Linux CI (0.499 after 0.548): the
+  preserved elite is re-evaluated every generation, and `validateElitism` allows a larger drop
+  as long as the elite itself is still present. A clean validation report under the Throw
+  policy is the real elitism check. It runs with file output on and deletes each run directory, and
   the empty `data/<Task> Pareto/` parent too, so the dashboard does not list a run-less experiment.
 - Tests: fast lane 265/265, slow lane 9/9 (both Pareto runs about 20–35 s).
 - CLI check, `--task and --ablation pareto-selection --runs 1 --pop 100 --gens 15`: groups

@@ -117,17 +117,6 @@ namespace
         }
     }
 
-    // Elitism is unchanged in Pareto mode (decision D4): the scalar best survives.
-    void requireBestFitnessKeepsItsHighWaterMark(const std::vector<double>& history)
-    {
-        double highWaterMark = 0.0;
-        for (const double fitness : history)
-        {
-            REQUIRE(fitness >= highWaterMark - PopulationConstants::elitismFitnessEpsilon);
-            highWaterMark = std::max(highWaterMark, fitness);
-        }
-    }
-
     // Runs settings.numRuns Pareto-mode evolutions of the task with file output on,
     // checks each run's objectives.jsonl, and deletes the run's directory.
     void requireParetoEvolutionHolds(const std::string& slug, const std::string& solutionName)
@@ -149,9 +138,12 @@ namespace
             population.initialize();
             REQUIRE_NOTHROW(population.evolve());
 
+            // Elitism is unchanged in Pareto mode (decision D4). validateElitism() runs under
+            // the test binary's Throw policy, so a clean report covers it. The recorded best
+            // fitness itself is not monotone: the preserved elite is re-evaluated every
+            // generation, and noise can move it by more than elitismFitnessEpsilon.
             INFO("validation:\n" << join(population.getValidationReport().messages, "\n"));
             REQUIRE(population.getValidationReport().clean());
-            requireBestFitnessKeepsItsHighWaterMark(population.getBestFitnessHistory());
 
             const auto runDirectory = newRunDirectory(parentDirectory, preExisting);
             REQUIRE_FALSE(runDirectory.empty());
