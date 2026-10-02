@@ -1,4 +1,6 @@
 #include "neat_tools/config_loader.h"
+#include <algorithm>
+#include <array>
 
 #include <format>
 #include <fstream>
@@ -6,6 +8,7 @@
 #include <mutex>
 #include <set>
 #include <stdexcept>
+#include <string_view>
 
 #include "constants.h"
 #include "neat_tools/resource_paths.h"
@@ -178,62 +181,47 @@ namespace neat_dnfs
 			}
 		}
 
-		// The config spells the mode as a lowercase string; anything else is a typo
-		// that must not silently fall back to scalar selection.
-		SelectionMode parseSelectionMode(const std::string& name)
+		/// One spelling a SelectionConstants enum field accepts in the config.
+		template <typename Enum>
+		struct NamedChoice
 		{
-			if (name == "scalar")
-			{
-				return SelectionMode::Scalar;
-			}
-			if (name == "pareto")
-			{
-				return SelectionMode::Pareto;
-			}
-			throw std::runtime_error("ConfigLoader: SelectionConstants.mode '" + name
-				+ "' is unknown; expected \"scalar\" or \"pareto\".");
-		}
+			std::string_view name;
+			Enum value;
+		};
 
-		StagnationSignal parseStagnationSignal(const std::string& name)
-		{
-			if (name == "front")
-			{
-				return StagnationSignal::Front;
-			}
-			if (name == "fitness")
-			{
-				return StagnationSignal::Fitness;
-			}
-			throw std::runtime_error("ConfigLoader: SelectionConstants.stagnationSignal '" + name
-				+ "' is unknown; expected \"front\" or \"fitness\".");
-		}
+		constexpr std::array<NamedChoice<SelectionMode>, 2> selectionModes{ {
+			{ "scalar", SelectionMode::Scalar }, { "pareto", SelectionMode::Pareto } } };
+		constexpr std::array<NamedChoice<StagnationSignal>, 2> stagnationSignals{ {
+			{ "front", StagnationSignal::Front }, { "fitness", StagnationSignal::Fitness } } };
+		constexpr std::array<NamedChoice<FrontTieBreak>, 2> frontTieBreaks{ {
+			{ "crowding", FrontTieBreak::Crowding }, { "fitness", FrontTieBreak::Fitness } } };
+		constexpr std::array<NamedChoice<OffspringAllocation>, 2> offspringAllocations{ {
+			{ "rank", OffspringAllocation::Rank }, { "fitness", OffspringAllocation::Fitness } } };
 
-		OffspringAllocation parseOffspringAllocation(const std::string& name)
+		// Reads an optional enum field spelled as one of `choices`. An unknown spelling is a
+		// typo, and must not silently fall back to the default.
+		template <typename Enum, size_t Count>
+		void readChoice(const nlohmann::json& block, const char* key,
+			const std::array<NamedChoice<Enum>, Count>& choices, Enum* target)
 		{
-			if (name == "rank")
+			if (!block.contains(key))
 			{
-				return OffspringAllocation::Rank;
+				return;
 			}
-			if (name == "fitness")
+			const auto name = block.at(key).get<std::string>();
+			const auto match = std::ranges::find(choices, std::string_view(name), &NamedChoice<Enum>::name);
+			if (match != choices.end())
 			{
-				return OffspringAllocation::Fitness;
+				*target = match->value;
+				return;
 			}
-			throw std::runtime_error("ConfigLoader: SelectionConstants.offspringAllocation '" + name
-				+ "' is unknown; expected \"rank\" or \"fitness\".");
-		}
-
-		FrontTieBreak parseFrontTieBreak(const std::string& name)
-		{
-			if (name == "crowding")
+			std::string expected;
+			for (const auto& choice : choices)
 			{
-				return FrontTieBreak::Crowding;
+				expected += std::format("{}\"{}\"", expected.empty() ? "" : " or ", choice.name);
 			}
-			if (name == "fitness")
-			{
-				return FrontTieBreak::Fitness;
-			}
-			throw std::runtime_error("ConfigLoader: SelectionConstants.frontTieBreak '" + name
-				+ "' is unknown; expected \"crowding\" or \"fitness\".");
+			throw std::runtime_error(std::format("ConfigLoader: SelectionConstants.{} '{}' is unknown; expected {}.",
+				key, name, expected));
 		}
 
 		// Throws naming the key when value is outside [min, maxExclusive).
@@ -285,10 +273,7 @@ namespace neat_dnfs
 					+ std::string(block.type_name()) + ".");
 			}
 			checkNoUnknownSelectionKeys(block);
-			if (block.contains("mode"))
-			{
-				SelectionConstants::mode = parseSelectionMode(block.at("mode").get<std::string>());
-			}
+			readChoice(block, "mode", selectionModes, &SelectionConstants::mode);
 			if (block.contains("objectiveGroups"))
 			{
 				ConfigLoader::field(block, "objectiveGroups", &SelectionConstants::objectiveGroups);
@@ -300,18 +285,9 @@ namespace neat_dnfs
 			}
 			SelectionConstants::archiveEpsilon = block.value("archiveEpsilon", SelectionConstants::dominanceEpsilon);
 			requireInRange("archiveEpsilon", SelectionConstants::archiveEpsilon, 0.0, 0.5);
-			if (block.contains("offspringAllocation"))
-			{
-				SelectionConstants::offspringAllocation = parseOffspringAllocation(block.at("offspringAllocation").get<std::string>());
-			}
-			if (block.contains("frontTieBreak"))
-			{
-				SelectionConstants::frontTieBreak = parseFrontTieBreak(block.at("frontTieBreak").get<std::string>());
-			}
-			if (block.contains("stagnationSignal"))
-			{
-				SelectionConstants::stagnationSignal = parseStagnationSignal(block.at("stagnationSignal").get<std::string>());
-			}
+			readChoice(block, "offspringAllocation", offspringAllocations, &SelectionConstants::offspringAllocation);
+			readChoice(block, "frontTieBreak", frontTieBreaks, &SelectionConstants::frontTieBreak);
+			readChoice(block, "stagnationSignal", stagnationSignals, &SelectionConstants::stagnationSignal);
 			if (block.contains("violationEpsilon"))
 			{
 				ConfigLoader::field(block, "violationEpsilon", &SelectionConstants::violationEpsilon);

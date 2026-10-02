@@ -510,6 +510,12 @@ namespace neat_dnfs
 			return mode == SelectionMode::Pareto ? "pareto" : "scalar";
 		}
 
+		// The same spelling the config uses for SelectionConstants.offspringAllocation.
+		std::string offspringAllocationName(const OffspringAllocation allocation)
+		{
+			return allocation == OffspringAllocation::Fitness ? "fitness" : "rank";
+		}
+
 		// The same spelling the config uses for SelectionConstants.frontTieBreak.
 		std::string frontTieBreakName(const FrontTieBreak tieBreak)
 		{
@@ -561,7 +567,7 @@ namespace neat_dnfs
 			{"violationEpsilon", SelectionConstants::violationEpsilon},
 			{"stagnationSignal", stagnationSignalName(SelectionConstants::stagnationSignal)},
 			{"frontTieBreak", frontTieBreakName(SelectionConstants::frontTieBreak)},
-			{"offspringAllocation", SelectionConstants::offspringAllocation == OffspringAllocation::Fitness ? "fitness" : "rank"},
+			{"offspringAllocation", offspringAllocationName(SelectionConstants::offspringAllocation)},
 			{"feasibilityFloor", SelectionConstants::feasibilityFloor},
 			{"objectiveGroups", SelectionConstants::objectiveGroups},
 			{"individuals", individuals},
@@ -635,7 +641,7 @@ namespace neat_dnfs
 			{"violationEpsilon", SelectionConstants::violationEpsilon},
 			{"stagnationSignal", stagnationSignalName(SelectionConstants::stagnationSignal)},
 			{"frontTieBreak", frontTieBreakName(SelectionConstants::frontTieBreak)},
-			{"offspringAllocation", SelectionConstants::offspringAllocation == OffspringAllocation::Fitness ? "fitness" : "rank"},
+			{"offspringAllocation", offspringAllocationName(SelectionConstants::offspringAllocation)},
 			{"feasibilityFloor", SelectionConstants::feasibilityFloor},
 			{"objectiveGroups", SelectionConstants::objectiveGroups},
 			{"members", members}
