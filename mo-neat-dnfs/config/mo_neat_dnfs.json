@@ -163,7 +163,8 @@
     "saveSolutions": true,
     "saveSpecies": true,
     "saveStructuredOverview": true,
-    "saveObjectives": true
+    "saveObjectives": true,
+    "saveParetoFront": true
   },
   "SelectionConstants": {
     "mode": "scalar",

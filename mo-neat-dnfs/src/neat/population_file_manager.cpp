@@ -52,6 +52,10 @@ namespace neat_dnfs
 		{
 			saveObjectivesForGeneration();
 		}
+		if (SelectionConstants::mode == SelectionMode::Pareto && PopulationConstants::saveParetoFront)
+		{
+			saveParetoFrontForGeneration();
+		}
 	}
 
 	void PopulationFileManager::savePerGenerationData() const
@@ -553,21 +557,38 @@ namespace neat_dnfs
 		}
 	}
 
-	void PopulationFileManager::saveParetoArchive() const
+	void PopulationFileManager::saveArchiveMembersInPopulation(const std::string& directoryPath) const
 	{
-		const std::string frontDirectory = fileDirectory + "pareto_front/";
-		std::filesystem::create_directories(frontDirectory);
-
-		nlohmann::json members = nlohmann::json::array();
 		for (const auto& entry : population->paretoArchive.members())
 		{
 			const auto alive = std::ranges::find_if(population->solutions,
 				[&entry](const SolutionPtr& solution) { return solution->getId() == entry.solutionId; });
-			const bool inFinalPopulation = alive != population->solutions.end();
-			if (inFinalPopulation)
+			if (alive != population->solutions.end())
 			{
-				saveSolutionPhenotype(*alive, frontDirectory);
+				std::filesystem::create_directories(directoryPath);
+				saveSolutionPhenotype(*alive, directoryPath);
 			}
+		}
+	}
+
+	void PopulationFileManager::saveParetoFrontForGeneration() const
+	{
+		saveArchiveMembersInPopulation(std::format("{}pareto_front/gen {}/", fileDirectory,
+			population->parameters.currentGeneration));
+	}
+
+	void PopulationFileManager::saveParetoArchive() const
+	{
+		if (PopulationConstants::saveParetoFront)
+		{
+			saveArchiveMembersInPopulation(fileDirectory + "pareto_front/last_generation/");
+		}
+
+		nlohmann::json members = nlohmann::json::array();
+		for (const auto& entry : population->paretoArchive.members())
+		{
+			const bool inFinalPopulation = std::ranges::any_of(population->solutions,
+				[&entry](const SolutionPtr& solution) { return solution->getId() == entry.solutionId; });
 			members.push_back({
 				{"id", entry.solutionId},
 				{"generationFound", entry.generationFound},

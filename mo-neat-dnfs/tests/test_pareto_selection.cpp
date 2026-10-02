@@ -2,8 +2,10 @@
 #include <catch2/catch_approx.hpp>
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <limits>
 #include <random>
@@ -533,95 +535,200 @@ TEST_CASE("Pareto-mode species improvement falls back to holding the new lowest 
 
 // --- integration ------------------------------------------------------------------
 
-TEST_CASE("Population::evolve runs Pareto selection on a conflicting-objective stub", "[Population]")
+namespace
 {
-    const ScopedParetoSelection pareto(0.0, 0.01);
-    resetGlobalState();
-    constexpr int populationSize = 20;
-    constexpr int generations = 5;
-    const PopulationParameters parameters(populationSize, generations, 1.1);
-    const std::string solutionName = "ObjectiveStub";
-    const auto parentDirectory = paths::dataRoot() / "data" / solutionName;
-    std::unordered_set<std::string> preExisting;
-    if (std::filesystem::exists(parentDirectory))
+    constexpr int stubPopulationSize = 20;
+    constexpr int stubGenerations = 5;
+
+    // Evolves the conflicting-objective stub in Pareto mode with file output on, and
+    // returns the run directory it wrote (with a trailing slash).
+    std::string evolveObjectiveStub()
     {
+        resetGlobalState();
+        const PopulationParameters parameters(stubPopulationSize, stubGenerations, 1.1);
+        const auto parentDirectory = paths::dataRoot() / "data" / "ObjectiveStub";
+        std::unordered_set<std::string> preExisting;
+        if (std::filesystem::exists(parentDirectory))
+        {
+            for (const auto& entry : std::filesystem::directory_iterator(parentDirectory))
+            {
+                preExisting.insert(entry.path().filename().string());
+            }
+        }
+
+        Population population(parameters, std::make_shared<ObjectiveStubSolution>(makeTopology(1, 1)));
+        population.setValidationPolicy(ValidationPolicy::Throw);
+        population.initialize();
+        REQUIRE_NOTHROW(population.evolve());
+        REQUIRE(population.getValidationReport().clean());
+        REQUIRE(population.getCurrentGeneration() == stubGenerations);
+
         for (const auto& entry : std::filesystem::directory_iterator(parentDirectory))
         {
-            preExisting.insert(entry.path().filename().string());
-        }
-    }
-
-    Population population(parameters, std::make_shared<ObjectiveStubSolution>(makeTopology(1, 1)));
-    population.setValidationPolicy(ValidationPolicy::Throw);
-    population.initialize();
-    REQUIRE_NOTHROW(population.evolve());
-    REQUIRE(population.getValidationReport().clean());
-    REQUIRE(population.getCurrentGeneration() == generations);
-
-    std::string runDirectory;
-    for (const auto& entry : std::filesystem::directory_iterator(parentDirectory))
-    {
-        if (!preExisting.contains(entry.path().filename().string()))
-        {
-            runDirectory = entry.path().generic_string() + "/";
-        }
-    }
-    REQUIRE(!runDirectory.empty());
-
-    std::ifstream objectivesFile(runDirectory + "objectives.jsonl");
-    std::vector<nlohmann::json> records;
-    for (std::string line; std::getline(objectivesFile, line);)
-    {
-        if (!line.empty())
-        {
-            records.push_back(nlohmann::json::parse(line));
-        }
-    }
-    REQUIRE(records.size() == generations);
-    for (const auto& record : records)
-    {
-        REQUIRE(record.at("mode") == "pareto");
-        const auto& individuals = record.at("individuals");
-        REQUIRE(individuals.size() == populationSize);
-        for (const auto& dominator : individuals)
-        {
-            for (const auto& dominated : individuals)
+            if (!preExisting.contains(entry.path().filename().string()))
             {
-                const RankedPoint a{ dominator.at("objectives").get<std::vector<double>>(), dominator.at("violation").get<double>() };
-                const RankedPoint b{ dominated.at("objectives").get<std::vector<double>>(), dominated.at("violation").get<double>() };
-                if (constrainedDominates(a, b, 0.01))
+                return entry.path().generic_string() + "/";
+            }
+        }
+        FAIL("evolve() created no run directory under " << parentDirectory.generic_string());
+        return {};
+    }
+
+    std::vector<nlohmann::json> readObjectiveRecords(const std::string& runDirectory)
+    {
+        std::ifstream objectivesFile(runDirectory + "objectives.jsonl");
+        std::vector<nlohmann::json> records;
+        for (std::string line; std::getline(objectivesFile, line);)
+        {
+            if (!line.empty())
+            {
+                records.push_back(nlohmann::json::parse(line));
+            }
+        }
+        return records;
+    }
+
+    size_t fileCount(const std::string& directory)
+    {
+        return static_cast<size_t>(std::distance(
+            std::filesystem::directory_iterator(directory), std::filesystem::directory_iterator{}));
+    }
+
+    // Saved phenotypes are named after solutionIdentifier(): "solution <id> generation <gen> ...".
+    bool holdsPhenotypeOf(const std::string& directory, const int id, const int generation)
+    {
+        if (!std::filesystem::is_directory(directory))
+        {
+            return false;
+        }
+        const std::string prefix = std::format("solution {} generation {} ", id, generation);
+        return std::ranges::any_of(std::filesystem::directory_iterator(directory),
+            [&prefix](const auto& entry) { return entry.path().filename().string().starts_with(prefix); });
+    }
+
+    std::string frontDirectoryOf(const std::string& runDirectory, const int generation)
+    {
+        return std::format("{}pareto_front/gen {}/", runDirectory, generation);
+    }
+
+    // Restores saveParetoFront's default even if the test fails.
+    struct ScopedSaveParetoFront
+    {
+        explicit ScopedSaveParetoFront(const bool save) { PopulationConstants::saveParetoFront = save; }
+        ~ScopedSaveParetoFront() { PopulationConstants::saveParetoFront = true; }
+        ScopedSaveParetoFront(const ScopedSaveParetoFront&) = delete;
+        ScopedSaveParetoFront& operator=(const ScopedSaveParetoFront&) = delete;
+        ScopedSaveParetoFront(ScopedSaveParetoFront&&) = delete;
+        ScopedSaveParetoFront& operator=(ScopedSaveParetoFront&&) = delete;
+    };
+    void requireRanksConsistentWithDominance(const std::vector<nlohmann::json>& records)
+    {
+        for (const auto& record : records)
+        {
+            REQUIRE(record.at("mode") == "pareto");
+            const auto& individuals = record.at("individuals");
+            REQUIRE(individuals.size() == stubPopulationSize);
+            for (const auto& dominator : individuals)
+            {
+                for (const auto& dominated : individuals)
                 {
-                    REQUIRE(dominator.at("rank").get<int>() < dominated.at("rank").get<int>());
+                    const RankedPoint a{ dominator.at("objectives").get<std::vector<double>>(), dominator.at("violation").get<double>() };
+                    const RankedPoint b{ dominated.at("objectives").get<std::vector<double>>(), dominated.at("violation").get<double>() };
+                    if (constrainedDominates(a, b, 0.01))
+                    {
+                        REQUIRE(dominator.at("rank").get<int>() < dominated.at("rank").get<int>());
+                    }
                 }
             }
         }
     }
-    const auto finalArchiveSize = records.back().at("archive").at("size").get<size_t>();
-    REQUIRE(finalArchiveSize > 0);
+
+    nlohmann::json readArchiveRecord(const std::string& runDirectory)
+    {
+        std::ifstream archiveFile(runDirectory + "pareto_archive.json");
+        REQUIRE(archiveFile.is_open());
+        return nlohmann::json::parse(archiveFile);
+    }
 
     // End of a Pareto run: the archive, and the phenotypes of its members still alive.
-    std::ifstream archiveFile(runDirectory + "pareto_archive.json");
-    REQUIRE(archiveFile.is_open());
-    const auto archive = nlohmann::json::parse(archiveFile);
-    REQUIRE(archive.at("mode") == "pareto");
-    REQUIRE(archive.at("members").size() == finalArchiveSize);
-    size_t alive = 0;
-    for (const auto& member : archive.at("members"))
+    void requireArchiveRecordAndSurvivors(const nlohmann::json& archive, const size_t finalArchiveSize,
+        const std::string& runDirectory)
     {
-        REQUIRE(member.at("objectives").size() == 2);
-        REQUIRE(member.at("partialFitness").size() == 2);
-        REQUIRE(member.contains("id"));
-        REQUIRE(member.contains("generationFound"));
-        REQUIRE(member.contains("fitness"));
-        alive += member.at("inFinalPopulation").get<bool>() ? 1 : 0;
+        REQUIRE(archive.at("mode") == "pareto");
+        REQUIRE(archive.at("members").size() == finalArchiveSize);
+        size_t alive = 0;
+        for (const auto& member : archive.at("members"))
+        {
+            REQUIRE(member.at("objectives").size() == 2);
+            REQUIRE(member.at("partialFitness").size() == 2);
+            REQUIRE(member.contains("id"));
+            REQUIRE(member.contains("generationFound"));
+            REQUIRE(member.contains("fitness"));
+            alive += member.at("inFinalPopulation").get<bool>() ? 1 : 0;
+        }
+        const auto lastGenerationDirectory = runDirectory + "pareto_front/last_generation/";
+        REQUIRE(std::filesystem::is_directory(lastGenerationDirectory));
+        REQUIRE(fileCount(lastGenerationDirectory) == alive);
     }
-    const auto frontDirectory = runDirectory + "pareto_front/";
-    REQUIRE(std::filesystem::is_directory(frontDirectory));
-    const auto savedPhenotypes = static_cast<size_t>(std::distance(
-        std::filesystem::directory_iterator(frontDirectory), std::filesystem::directory_iterator{}));
-    REQUIRE(savedPhenotypes == alive);
 
-    objectivesFile.close();
-    archiveFile.close();
-    std::filesystem::remove_all(runDirectory);
+    // Every generation saves the archive members in its population, so each
+    // member's phenotype is on disk under the generation that found it.
+    void requireEveryGenerationsFrontSaved(const std::vector<nlohmann::json>& records,
+        const nlohmann::json& archive, const std::string& runDirectory)
+    {
+        for (const auto& member : archive.at("members"))
+        {
+            const int generationFound = member.at("generationFound").get<int>();
+            INFO("member " << member.at("id") << " found in generation " << generationFound);
+            REQUIRE(holdsPhenotypeOf(frontDirectoryOf(runDirectory, generationFound),
+                member.at("id").get<int>(), generationFound));
+        }
+        for (const auto& record : records)
+        {
+            const int generation = record.at("generation").get<int>();
+            INFO("generation " << generation);
+            const auto directory = frontDirectoryOf(runDirectory, generation);
+            for (const auto& id : record.at("archive").at("acceptedThisGeneration"))
+            {
+                REQUIRE(holdsPhenotypeOf(directory, id.get<int>(), generation));
+            }
+            const auto archiveSize = record.at("archive").at("size").get<size_t>();
+            REQUIRE((std::filesystem::exists(directory) ? fileCount(directory) : 0) <= archiveSize);
+        }
+    }
+}
+
+TEST_CASE("Population::evolve runs Pareto selection on a conflicting-objective stub", "[Population]")
+{
+    // One test case, so the two runs share a process and run one after the other: run
+    // directories are named to the second, and two processes would collide.
+    const ScopedParetoSelection pareto(0.0, 0.01);
+
+    SECTION("saveParetoFront on: the archive and every generation's front are saved")
+    {
+        const ScopedSaveParetoFront saveFront(true);
+        const std::string runDirectory = evolveObjectiveStub();
+
+        const auto records = readObjectiveRecords(runDirectory);
+        REQUIRE(records.size() == stubGenerations);
+        requireRanksConsistentWithDominance(records);
+        const auto finalArchiveSize = records.back().at("archive").at("size").get<size_t>();
+        REQUIRE(finalArchiveSize > 0);
+        const auto archive = readArchiveRecord(runDirectory);
+        requireArchiveRecordAndSurvivors(archive, finalArchiveSize, runDirectory);
+        requireEveryGenerationsFrontSaved(records, archive, runDirectory);
+
+        std::filesystem::remove_all(runDirectory);
+    }
+
+    SECTION("saveParetoFront off: the archive record only, no pareto_front/")
+    {
+        const ScopedSaveParetoFront saveFront(false);
+        const std::string runDirectory = evolveObjectiveStub();
+
+        REQUIRE(std::filesystem::exists(runDirectory + "pareto_archive.json"));
+        REQUIRE_FALSE(std::filesystem::exists(runDirectory + "pareto_front"));
+
+        std::filesystem::remove_all(runDirectory);
+    }
 }

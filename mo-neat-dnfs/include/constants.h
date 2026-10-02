@@ -23,7 +23,7 @@ namespace neat_dnfs
 	// deliberately no compiled-in fallbacks: a missing config file or key is a
 	// hard startup error, so a run can never silently use a value that is not
 	// recorded in the config it was launched with. SelectionConstants and
-	// PopulationConstants::saveObjectives are the exception: they postdate
+	// PopulationConstants::saveObjectives/saveParetoFront are the exception: they postdate
 	// users' own config files, so they are optional and carry defaults.
 	//
 	// The name/namePrefix string_views are the exception and stay compile-time.
@@ -366,5 +366,8 @@ namespace neat_dnfs
 		// Optional in config, unlike the flags above: defaults to true when the
 		// key is absent, so configs written before it existed keep loading.
 		inline static bool saveObjectives = true;
+		// Optional like saveObjectives; Pareto mode only. Saves each generation's
+		// archive members under pareto_front/gen N/ and the survivors at the end.
+		inline static bool saveParetoFront = true;
 	};
 }
