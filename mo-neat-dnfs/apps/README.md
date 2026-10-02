@@ -59,6 +59,11 @@ value. `violationEpsilon` makes two infeasible solutions whose total shortfall b
 `feasibilityFloor` differs by less than it compare on their objectives instead; 0 is Deb's
 exact rule.
 
+`SelectionConstants.stagnationSignal` decides what counts as progress for stagnation in Pareto
+mode. `"front"` (the default) counts a point entering the archive (population) or a species'
+own front (species). `"fitness"` uses scalar mode's rules unchanged, so the two modes differ
+only in how they rank.
+
 Each `config/solutions/<task>.json` also sets `SelectionConstants.objectiveGroups`, which
 partitions that task's partial fitnesses into the objectives Pareto selection ranks on (for
 `and`: input representation, output logic, return to rest). Scalar selection ignores them;

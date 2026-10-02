@@ -172,6 +172,7 @@
     "dominanceEpsilon": 0.0,
     "feasibilityFloor": 0.0,
     "archiveCapacity": 100,
-    "violationEpsilon": 0.0
+    "violationEpsilon": 0.0,
+    "stagnationSignal": "front"
   }
 }
