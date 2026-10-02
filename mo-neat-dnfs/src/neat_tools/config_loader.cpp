@@ -208,6 +208,20 @@ namespace neat_dnfs
 				+ "' is unknown; expected \"front\" or \"fitness\".");
 		}
 
+		FrontTieBreak parseFrontTieBreak(const std::string& name)
+		{
+			if (name == "crowding")
+			{
+				return FrontTieBreak::Crowding;
+			}
+			if (name == "fitness")
+			{
+				return FrontTieBreak::Fitness;
+			}
+			throw std::runtime_error("ConfigLoader: SelectionConstants.frontTieBreak '" + name
+				+ "' is unknown; expected \"crowding\" or \"fitness\".");
+		}
+
 		// Throws naming the key when value is outside [min, maxExclusive).
 		void requireInRange(const char* key, const double value, const double min, const double maxExclusive)
 		{
@@ -227,7 +241,7 @@ namespace neat_dnfs
 		{
 			static const std::set<std::string> known = {
 				"mode", "objectiveGroups", "dominanceEpsilon", "feasibilityFloor", "archiveCapacity",
-				"archiveEpsilon", "violationEpsilon", "stagnationSignal",
+				"archiveEpsilon", "violationEpsilon", "stagnationSignal", "frontTieBreak",
 			};
 			for (const auto& item : block.items())
 			{
@@ -272,6 +286,10 @@ namespace neat_dnfs
 			}
 			SelectionConstants::archiveEpsilon = block.value("archiveEpsilon", SelectionConstants::dominanceEpsilon);
 			requireInRange("archiveEpsilon", SelectionConstants::archiveEpsilon, 0.0, 0.5);
+			if (block.contains("frontTieBreak"))
+			{
+				SelectionConstants::frontTieBreak = parseFrontTieBreak(block.at("frontTieBreak").get<std::string>());
+			}
 			if (block.contains("stagnationSignal"))
 			{
 				SelectionConstants::stagnationSignal = parseStagnationSignal(block.at("stagnationSignal").get<std::string>());

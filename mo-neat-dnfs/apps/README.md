@@ -64,6 +64,11 @@ mode. `"front"` (the default) counts a point entering the archive (population) o
 own front (species). `"fitness"` uses scalar mode's rules unchanged, so the two modes differ
 only in how they rank.
 
+`SelectionConstants.frontTieBreak` orders two solutions on the same front. `"crowding"` (the
+default, NSGA-II) prefers the larger crowding distance, which spreads the population along the
+front. `"fitness"` prefers the higher weighted fitness, which pushes toward every objective
+being high at once while dominance still keeps specialists off the first front.
+
 Each `config/solutions/<task>.json` also sets `SelectionConstants.objectiveGroups`, which
 partitions that task's partial fitnesses into the objectives Pareto selection ranks on (for
 `and`: input representation, output logic, return to rest). Scalar selection ignores them;

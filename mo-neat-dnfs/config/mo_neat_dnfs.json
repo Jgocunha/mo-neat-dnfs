@@ -173,6 +173,7 @@
     "feasibilityFloor": 0.0,
     "archiveCapacity": 100,
     "violationEpsilon": 0.0,
-    "stagnationSignal": "front"
+    "stagnationSignal": "front",
+    "frontTieBreak": "crowding"
   }
 }

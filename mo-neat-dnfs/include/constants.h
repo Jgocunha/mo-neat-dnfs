@@ -316,6 +316,13 @@ namespace neat_dnfs
 		Fitness	///< the weighted-sum rules scalar mode uses: the best fitness, the champion's fitness
 	};
 
+	/// @brief How Pareto mode orders two solutions on the same front.
+	enum class FrontTieBreak
+	{
+		Crowding,	///< the larger crowding distance first (NSGA-II): spreads the population along the front
+		Fitness		///< the larger weighted fitness first: pushes toward every objective being high at once
+	};
+
 	/// @brief Multi-objective selection settings (config block "SelectionConstants").
 	/// @details The exception to this file's no-fallback rule: every field has a
 	/// compiled-in default, and ConfigLoader restores them when a config has no
@@ -342,6 +349,7 @@ namespace neat_dnfs
 		// Fitness gives Pareto mode exactly scalar mode's stagnation bookkeeping, so
 		// the two modes differ only in how they rank.
 		inline static StagnationSignal stagnationSignal = StagnationSignal::Front;
+		inline static FrontTieBreak frontTieBreak = FrontTieBreak::Crowding;
 
 		/// @brief Restores every field to its compiled-in default.
 		static void reset()
@@ -354,6 +362,7 @@ namespace neat_dnfs
 			archiveEpsilon = 0.0;
 			violationEpsilon = 0.0;
 			stagnationSignal = StagnationSignal::Front;
+			frontTieBreak = FrontTieBreak::Crowding;
 		}
 	};
 

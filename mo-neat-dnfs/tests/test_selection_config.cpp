@@ -71,6 +71,7 @@ namespace
         SelectionConstants::archiveEpsilon = 0.25;
         SelectionConstants::violationEpsilon = 0.35;
         SelectionConstants::stagnationSignal = StagnationSignal::Fitness;
+        SelectionConstants::frontTieBreak = FrontTieBreak::Fitness;
     }
 
     // Asserts every selection field holds its compiled-in default.
@@ -84,6 +85,7 @@ namespace
         REQUIRE(SelectionConstants::archiveEpsilon == 0.0);
         REQUIRE(SelectionConstants::violationEpsilon == 0.0);
         REQUIRE(SelectionConstants::stagnationSignal == StagnationSignal::Front);
+        REQUIRE(SelectionConstants::frontTieBreak == FrontTieBreak::Crowding);
     }
 
     // Restores the default (empty) grouping even when construction throws.
@@ -476,4 +478,18 @@ TEST_CASE("ConfigLoader reads stagnationSignal and rejects an unknown one", "[Se
 
     REQUIRE_THROWS_WITH(loadWithSelectionBlock({ { "stagnationSignal", "archive" } }, "stagnation-unknown.json"),
         Catch::Matchers::ContainsSubstring("stagnationSignal"));
+}
+
+TEST_CASE("ConfigLoader reads frontTieBreak and rejects an unknown one", "[SelectionConfig]")
+{
+    const RestoreReferenceConfig restore;
+
+    loadWithSelectionBlock({ { "frontTieBreak", "fitness" } }, "tie-break-fitness.json");
+    REQUIRE(SelectionConstants::frontTieBreak == FrontTieBreak::Fitness);
+
+    loadWithSelectionBlock(json::object(), "tie-break-default.json");
+    REQUIRE(SelectionConstants::frontTieBreak == FrontTieBreak::Crowding);
+
+    REQUIRE_THROWS_WITH(loadWithSelectionBlock({ { "frontTieBreak", "age" } }, "tie-break-unknown.json"),
+        Catch::Matchers::ContainsSubstring("frontTieBreak"));
 }

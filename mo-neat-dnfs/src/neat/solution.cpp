@@ -651,8 +651,15 @@ namespace neat_dnfs
 		}
 		const int front = frontOrLast(parameters);
 		const int otherFront = frontOrLast(other.parameters);
-		return front < otherFront
-			|| (front == otherFront && parameters.crowdingDistance > other.parameters.crowdingDistance);
+		if (front != otherFront)
+		{
+			return front < otherFront;
+		}
+		if (SelectionConstants::frontTieBreak == FrontTieBreak::Fitness)
+		{
+			return parameters.fitness > other.parameters.fitness;
+		}
+		return parameters.crowdingDistance > other.parameters.crowdingDistance;
 	}
 
 	bool Solution::isEquivalentForSelection(const Solution& other) const

@@ -140,6 +140,20 @@ TEST_CASE("Solution::isPreferredTo ranks by front, then crowding, in Pareto mode
     REQUIRE_FALSE(unranked->isPreferredTo(*unranked));
 }
 
+TEST_CASE("Solution::isPreferredTo breaks ties within a front by fitness when asked to", "[ParetoSelection]")
+{
+    const ScopedParetoSelection pareto;
+    SelectionConstants::frontTieBreak = FrontTieBreak::Fitness;
+    const auto fitterCrowded = rankedAt({ 0.6, 0.6 }, 0.6, 0, 0.1);
+    const auto weakerSparse = rankedAt({ 0.9, 0.1 }, 0.5, 0, infinity);
+    const auto fitterOnFrontOne = rankedAt({ 0.5, 0.5 }, 0.95, 1, infinity);
+
+    REQUIRE(fitterCrowded->isPreferredTo(*weakerSparse));
+    REQUIRE_FALSE(weakerSparse->isPreferredTo(*fitterCrowded));
+    // The front still comes first.
+    REQUIRE(weakerSparse->isPreferredTo(*fitterOnFrontOne));
+}
+
 TEST_CASE("Solution::isEquivalentForSelection in Pareto mode means same front and mutually non-dominated", "[ParetoSelection]")
 {
     const ScopedParetoSelection pareto;

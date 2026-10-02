@@ -211,8 +211,9 @@ namespace neat_dnfs
 		[[nodiscard]] double getSelectionFitness() const;
 		/// @brief The comparator every selection decision uses: sorting, pruning, champions,
 		/// the fitter crossover parent and the solution evicted for the preserved best.
-		/// @details Scalar mode: a higher fitness. Pareto mode: a lower front, then a larger
-		/// crowding distance; a solution not yet ranked (an offspring) loses to any ranked one.
+		/// @details Scalar mode: a higher fitness. Pareto mode: a lower front, then, on the same
+		/// front, a larger crowding distance or, with FrontTieBreak::Fitness, a higher fitness;
+		/// a solution not yet ranked (an offspring) loses to any ranked one.
 		/// @param other The solution to compare against.
 		/// @return True if this solution should be selected ahead of @p other.
 		[[nodiscard]] bool isPreferredTo(const Solution& other) const;
