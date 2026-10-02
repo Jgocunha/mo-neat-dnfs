@@ -631,7 +631,9 @@ namespace neat_dnfs
 
 	double Solution::getSelectionFitness() const
 	{
-		return SelectionConstants::mode == SelectionMode::Pareto ? parameters.selectionFitness : parameters.fitness;
+		const bool rankDerived = SelectionConstants::mode == SelectionMode::Pareto
+			&& SelectionConstants::offspringAllocation == OffspringAllocation::Rank;
+		return rankDerived ? parameters.selectionFitness : parameters.fitness;
 	}
 
 	namespace

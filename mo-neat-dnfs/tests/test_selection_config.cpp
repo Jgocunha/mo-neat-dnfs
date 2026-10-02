@@ -72,6 +72,7 @@ namespace
         SelectionConstants::violationEpsilon = 0.35;
         SelectionConstants::stagnationSignal = StagnationSignal::Fitness;
         SelectionConstants::frontTieBreak = FrontTieBreak::Fitness;
+        SelectionConstants::offspringAllocation = OffspringAllocation::Fitness;
     }
 
     // Asserts every selection field holds its compiled-in default.
@@ -86,6 +87,7 @@ namespace
         REQUIRE(SelectionConstants::violationEpsilon == 0.0);
         REQUIRE(SelectionConstants::stagnationSignal == StagnationSignal::Front);
         REQUIRE(SelectionConstants::frontTieBreak == FrontTieBreak::Crowding);
+        REQUIRE(SelectionConstants::offspringAllocation == OffspringAllocation::Rank);
     }
 
     // Restores the default (empty) grouping even when construction throws.
@@ -492,4 +494,18 @@ TEST_CASE("ConfigLoader reads frontTieBreak and rejects an unknown one", "[Selec
 
     REQUIRE_THROWS_WITH(loadWithSelectionBlock({ { "frontTieBreak", "age" } }, "tie-break-unknown.json"),
         Catch::Matchers::ContainsSubstring("frontTieBreak"));
+}
+
+TEST_CASE("ConfigLoader reads offspringAllocation and rejects an unknown one", "[SelectionConfig]")
+{
+    const RestoreReferenceConfig restore;
+
+    loadWithSelectionBlock({ { "offspringAllocation", "fitness" } }, "allocation-fitness.json");
+    REQUIRE(SelectionConstants::offspringAllocation == OffspringAllocation::Fitness);
+
+    loadWithSelectionBlock(json::object(), "allocation-default.json");
+    REQUIRE(SelectionConstants::offspringAllocation == OffspringAllocation::Rank);
+
+    REQUIRE_THROWS_WITH(loadWithSelectionBlock({ { "offspringAllocation", "species" } }, "allocation-unknown.json"),
+        Catch::Matchers::ContainsSubstring("offspringAllocation"));
 }

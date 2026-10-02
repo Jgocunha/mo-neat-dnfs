@@ -561,6 +561,7 @@ namespace neat_dnfs
 			{"violationEpsilon", SelectionConstants::violationEpsilon},
 			{"stagnationSignal", stagnationSignalName(SelectionConstants::stagnationSignal)},
 			{"frontTieBreak", frontTieBreakName(SelectionConstants::frontTieBreak)},
+			{"offspringAllocation", SelectionConstants::offspringAllocation == OffspringAllocation::Fitness ? "fitness" : "rank"},
 			{"feasibilityFloor", SelectionConstants::feasibilityFloor},
 			{"objectiveGroups", SelectionConstants::objectiveGroups},
 			{"individuals", individuals},
@@ -634,6 +635,7 @@ namespace neat_dnfs
 			{"violationEpsilon", SelectionConstants::violationEpsilon},
 			{"stagnationSignal", stagnationSignalName(SelectionConstants::stagnationSignal)},
 			{"frontTieBreak", frontTieBreakName(SelectionConstants::frontTieBreak)},
+			{"offspringAllocation", SelectionConstants::offspringAllocation == OffspringAllocation::Fitness ? "fitness" : "rank"},
 			{"feasibilityFloor", SelectionConstants::feasibilityFloor},
 			{"objectiveGroups", SelectionConstants::objectiveGroups},
 			{"members", members}

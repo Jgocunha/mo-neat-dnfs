@@ -180,6 +180,10 @@ TEST_CASE("Solution::getSelectionFitness is the fitness in scalar mode and rank-
 
     const ScopedParetoSelection pareto;
     REQUIRE(solution->getSelectionFitness() == Catch::Approx(0.25));
+
+    // Pareto mode can still share offspring between species by weighted fitness.
+    SelectionConstants::offspringAllocation = OffspringAllocation::Fitness;
+    REQUIRE(solution->getSelectionFitness() == Catch::Approx(0.42));
 }
 
 // --- crossover (section 2, row 7) ------------------------------------------------

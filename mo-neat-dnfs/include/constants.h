@@ -316,6 +316,13 @@ namespace neat_dnfs
 		Fitness	///< the weighted-sum rules scalar mode uses: the best fitness, the champion's fitness
 	};
 
+	/// @brief What Pareto mode shares offspring between species by.
+	enum class OffspringAllocation
+	{
+		Rank,	///< the rank-derived selection fitness, (fronts - rank) / fronts
+		Fitness	///< the weighted fitness, as scalar mode does
+	};
+
 	/// @brief How Pareto mode orders two solutions on the same front.
 	enum class FrontTieBreak
 	{
@@ -350,6 +357,7 @@ namespace neat_dnfs
 		// the two modes differ only in how they rank.
 		inline static StagnationSignal stagnationSignal = StagnationSignal::Front;
 		inline static FrontTieBreak frontTieBreak = FrontTieBreak::Crowding;
+		inline static OffspringAllocation offspringAllocation = OffspringAllocation::Rank;
 
 		/// @brief Restores every field to its compiled-in default.
 		static void reset()
@@ -363,6 +371,7 @@ namespace neat_dnfs
 			violationEpsilon = 0.0;
 			stagnationSignal = StagnationSignal::Front;
 			frontTieBreak = FrontTieBreak::Crowding;
+			offspringAllocation = OffspringAllocation::Rank;
 		}
 	};
 

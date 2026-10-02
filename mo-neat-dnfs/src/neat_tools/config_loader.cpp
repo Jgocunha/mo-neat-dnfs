@@ -208,6 +208,20 @@ namespace neat_dnfs
 				+ "' is unknown; expected \"front\" or \"fitness\".");
 		}
 
+		OffspringAllocation parseOffspringAllocation(const std::string& name)
+		{
+			if (name == "rank")
+			{
+				return OffspringAllocation::Rank;
+			}
+			if (name == "fitness")
+			{
+				return OffspringAllocation::Fitness;
+			}
+			throw std::runtime_error("ConfigLoader: SelectionConstants.offspringAllocation '" + name
+				+ "' is unknown; expected \"rank\" or \"fitness\".");
+		}
+
 		FrontTieBreak parseFrontTieBreak(const std::string& name)
 		{
 			if (name == "crowding")
@@ -241,7 +255,7 @@ namespace neat_dnfs
 		{
 			static const std::set<std::string> known = {
 				"mode", "objectiveGroups", "dominanceEpsilon", "feasibilityFloor", "archiveCapacity",
-				"archiveEpsilon", "violationEpsilon", "stagnationSignal", "frontTieBreak",
+				"archiveEpsilon", "violationEpsilon", "stagnationSignal", "frontTieBreak", "offspringAllocation",
 			};
 			for (const auto& item : block.items())
 			{
@@ -286,6 +300,10 @@ namespace neat_dnfs
 			}
 			SelectionConstants::archiveEpsilon = block.value("archiveEpsilon", SelectionConstants::dominanceEpsilon);
 			requireInRange("archiveEpsilon", SelectionConstants::archiveEpsilon, 0.0, 0.5);
+			if (block.contains("offspringAllocation"))
+			{
+				SelectionConstants::offspringAllocation = parseOffspringAllocation(block.at("offspringAllocation").get<std::string>());
+			}
 			if (block.contains("frontTieBreak"))
 			{
 				SelectionConstants::frontTieBreak = parseFrontTieBreak(block.at("frontTieBreak").get<std::string>());

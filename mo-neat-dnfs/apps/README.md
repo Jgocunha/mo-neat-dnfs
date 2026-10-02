@@ -69,6 +69,11 @@ default, NSGA-II) prefers the larger crowding distance, which spreads the popula
 front. `"fitness"` prefers the higher weighted fitness, which pushes toward every objective
 being high at once while dominance still keeps specialists off the first front.
 
+`SelectionConstants.offspringAllocation` decides what Pareto mode shares offspring between
+species by. `"rank"` (the default) uses the rank-derived selection fitness, `(fronts - rank) /
+fronts`. `"fitness"` uses the weighted fitness, as scalar mode does, so Pareto dominance only
+decides which members survive and breed within each species.
+
 Each `config/solutions/<task>.json` also sets `SelectionConstants.objectiveGroups`, which
 partitions that task's partial fitnesses into the objectives Pareto selection ranks on (for
 `and`: input representation, output logic, return to rest). Scalar selection ignores them;
