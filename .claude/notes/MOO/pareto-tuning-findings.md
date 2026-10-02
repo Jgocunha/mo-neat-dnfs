@@ -54,8 +54,10 @@ Every new option is opt-in; with none set, Pareto mode behaves as in Phase 5.
 
 XOR is unsolved by either mode at this budget: populations hold specialists for "fire on input
 1" and "fire on input 2", and the generalist needs an inhibitory hidden field, which the
-add-field mutation (probability 0.0005) rarely supplies. Memory trace: scalar's final populations
-are all feasible; in 3 of 5 V8 runs none is.
+add-field mutation (probability 0.0005) rarely supplies. Memory trace: in 3 of 5 V8 runs no
+solution in the final population is feasible (every partial at least 0.1). (Scalar runs record
+their violation with floor 0, so their recorded feasibility cannot be compared; `compare.py`
+recomputes feasibility at 0.1 for every arm.)
 
 ## Round 4 and 5: offspring sharing and ranking epsilon
 
@@ -87,7 +89,7 @@ is the median generation of success among the runs that succeeded.
 - Pareto leads on the tasks with several conflicting scenarios: AND (58% against 25% success)
   and XOR (lowest partial 0.46 against 0.17, fitness 0.86 against 0.77). Scalar leads slightly on
   the single-behaviour instability tasks and on memory trace's final fitness. None of the leads
-  is significant with 12 runs; 30 runs per arm would be needed to tell them apart.
+  is significant with 12 runs; telling them apart needs more runs per arm.
 - Memory trace is unsolved by both at this budget, so neither mode's comparison says much there.
 
 ## What the tuned preset is, and is not
