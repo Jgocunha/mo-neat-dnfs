@@ -940,3 +940,17 @@ al.), NEAT-MODS μ+λ selection, NSGA-III, and objective names in config (the da
   `.claude/notes/MOO/phase7-reduced-findings.md`.
 - `saveParetoFront` (PR #10) saves `pareto_front/gen N/` per generation, numbered like
   `objectives.jsonl`, one less than `solutions/gen N/` (a pre-existing offset, see the findings).
+
+### Selection fixes, tuning and the final comparison (branch `feat/pareto-selection-fixes`)
+- The user chose (2026-10-02): implement the three fixes, number `pareto_front/gen M` like
+  `solutions/gen M`, mute the Pages job, and run every task but hri-packaging so that Pareto
+  is better than or comparable to scalar, with a dashboard that makes the comparison obvious.
+- The three fixes are in (`archiveEpsilon`, `violationEpsilon`, per-species fronts). Tuning showed
+  they were not enough, and added three more opt-in options: `stagnationSignal`, `frontTieBreak`,
+  `offspringAllocation`. Every option defaults to the Phase 5 behaviour; the
+  `pareto-selection` presets set the tuned values. Evidence: `pareto-tuning-findings.md`.
+- With the tuned preset, Pareto mode differs from scalar only in which solutions survive and
+  breed within a species (dominance, floor, ties by fitness); stagnation and between-species
+  offspring sharing are scalar's. That is a deliberate step back from §3.3, made on data.
+- Run folders named to the second collided for sub-second runs; fixed with a ` (2)` suffix.
+- The visualizer has a Scalar vs Pareto page (`viz/moo_compare.py`) with a per-task verdict.
