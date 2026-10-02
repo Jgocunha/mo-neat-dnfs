@@ -1117,22 +1117,24 @@ def _arm_color(arms: list[str]) -> alt.Color:
                      legend=alt.Legend(orient="top"))
 
 
-def chart_arm_success(success: pd.DataFrame, arms: list[str]):
+def chart_arm_success(success: pd.DataFrame, arms: list[str], mode: str):
     """Success rate (every partial above the target) per task and arm, as bars with the k/n count."""
     base = alt.Chart(success).encode(
-        y=alt.Y("task:N", title=None),
+        y=alt.Y("task:N", title=None, axis=alt.Axis(labelLimit=240)),
         yOffset=alt.YOffset("arm:N", sort=arms),
-        x=alt.X("success_rate:Q", title="runs that met the target on every partial", axis=alt.Axis(format="%"),
-                scale=alt.Scale(domain=[0, 1])),
+        # The domain runs past 100% so a full bar still has room for its "k/n" label.
+        x=alt.X("success_rate:Q", title="runs that met the target on every partial",
+                axis=alt.Axis(format="%", values=[0, 0.25, 0.5, 0.75, 1.0]), scale=alt.Scale(domain=[0, 1.12])),
         tooltip=[alt.Tooltip("task:N"), alt.Tooltip("arm:N"), alt.Tooltip("label:N", title="successful runs"),
                  alt.Tooltip("success_rate:Q", title="success rate", format=".0%")],
     )
     bars = base.mark_bar(cornerRadiusEnd=4, height={"band": 0.8}).encode(color=_arm_color(arms))
-    labels = base.mark_text(align="left", dx=4).encode(text="label:N")
+    labels = base.mark_text(align="left", dx=4, color=TEXT_INK[mode]).encode(text="label:N")
     return alt.layer(bars, labels).properties(title="Success rate", height=alt.Step(14))
 
 
-def chart_arm_trajectories(bands: pd.DataFrame, arms: list[str], title: str, y_title: str, target: float | None = None):
+def chart_arm_trajectories(bands: pd.DataFrame, arms: list[str], title: str, y_title: str, mode: str,
+                           target: float | None = None):
     """Median (line) and interquartile range (band) across runs per generation, one panel per task."""
     color = _arm_color(arms)
     band = alt.Chart().mark_area(opacity=0.18).encode(
@@ -1144,7 +1146,7 @@ def chart_arm_trajectories(bands: pd.DataFrame, arms: list[str], title: str, y_t
     )
     layers = [band, line]
     if target is not None:
-        layers.append(alt.Chart().mark_rule(strokeDash=[4, 4], color=COLOR_TARGET, opacity=0.6).encode(
+        layers.append(alt.Chart().mark_rule(strokeDash=[4, 4], color=TEXT_INK[mode], opacity=0.6).encode(
             y=alt.datum(target)))
     return (
         alt.layer(*layers, data=bands)

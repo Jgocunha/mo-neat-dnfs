@@ -2384,7 +2384,8 @@ def render_scalar_vs_pareto_view(data_root_str: str):
         )
 
     st.divider()
-    st.altair_chart(chart_arm_success(pd.DataFrame(collected["success"]), arms), width="stretch")
+    mode = theme_type()
+    st.altair_chart(chart_arm_success(pd.DataFrame(collected["success"]), arms, mode), width="stretch")
 
     st.divider()
     st.markdown("### How the best solution evolved")
@@ -2395,9 +2396,9 @@ def render_scalar_vs_pareto_view(data_root_str: str):
         "keeps its final value."
     )
     st.altair_chart(chart_arm_trajectories(pd.concat(collected["partial_bands"], ignore_index=True), arms,
-                                           "Lowest partial of the best solution", "lowest partial", target), width="content")
+                                           "Lowest partial of the best solution", "lowest partial", mode, target), width="content")
     st.altair_chart(chart_arm_trajectories(pd.concat(collected["fitness_bands"], ignore_index=True), arms,
-                                           "Weighted fitness of the best solution", "fitness"), width="content")
+                                           "Weighted fitness of the best solution", "fitness", mode), width="content")
 
     st.divider()
     st.markdown("### Final population")

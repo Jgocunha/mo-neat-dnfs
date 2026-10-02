@@ -179,6 +179,7 @@ def arm_table(runs_by_arm: dict[str, list[dict]]) -> pd.DataFrame:
         runs = runs_by_arm[arm]
         rows.append({
             "arm": arm,
+            "verdict": "" if arm == SCALAR_ARM or not scalar else verdict(scalar, runs),
             "runs": len(runs),
             "success rate": sum(r["success"] for r in runs) / len(runs),
             "median generations to success": _median([r["generations_to_success"] for r in runs if r["success"]]),
@@ -186,6 +187,5 @@ def arm_table(runs_by_arm: dict[str, list[dict]]) -> pd.DataFrame:
             "best's lowest partial": _median([r["final_best_min_partial"] for r in runs]),
             "best generalist": _median([r["best_generalist"] for r in runs]),
             "feasible hypervolume": _median([r["feasible_hv"] for r in runs]),
-            "verdict": "" if arm == SCALAR_ARM or not scalar else verdict(scalar, runs),
         })
     return pd.DataFrame(rows)
