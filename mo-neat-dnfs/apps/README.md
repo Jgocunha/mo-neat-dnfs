@@ -34,9 +34,12 @@ Available tasks: `and`, `xor`, `detection-instability`, `memory-instability`,
 Available ablations: `no-growth-io-only`, `no-growth-reference-hidden-field-count`,
 `no-speciation`, `no-crossover`, `random-initial-topology`.
 
-Selection presets, passed through `--ablation` the same way: `pareto-selection` (Pareto
-selection, ε 0.01, feasibility floor 0.1) and `pareto-selection-no-floor` (the same, with
-the floor off).
+Selection presets, passed through `--ablation` the same way: `pareto-selection` and
+`pareto-selection-no-floor` (the same, with the floor off). `pareto-selection` ranks by Pareto
+dominance with ε 0.01 and a feasibility floor of 0.1, breaks ties within a front by weighted
+fitness, and keeps scalar mode's stagnation rules and offspring sharing, so it differs from
+scalar selection only in which solutions survive and breed. These are the settings that held
+up against scalar selection on every task (`.claude/notes/MOO/pareto-tuning-findings.md`).
 
 ## Configuration
 

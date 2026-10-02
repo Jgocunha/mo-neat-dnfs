@@ -383,8 +383,14 @@ TEST_CASE("The pareto-selection presets switch on Pareto selection", "[Selection
         REQUIRE(SelectionConstants::feasibilityFloor == 0.0);
     }
 
+    // .claude/notes/MOO/pareto-tuning-findings.md: the settings that held up against scalar.
     REQUIRE(SelectionConstants::mode == SelectionMode::Pareto);
     REQUIRE(SelectionConstants::dominanceEpsilon == Catch::Approx(0.01));
+    REQUIRE(SelectionConstants::archiveEpsilon == Catch::Approx(0.01));
+    REQUIRE(SelectionConstants::violationEpsilon == Catch::Approx(0.01));
+    REQUIRE(SelectionConstants::stagnationSignal == StagnationSignal::Fitness);
+    REQUIRE(SelectionConstants::frontTieBreak == FrontTieBreak::Fitness);
+    REQUIRE(SelectionConstants::offspringAllocation == OffspringAllocation::Fitness);
     REQUIRE(SelectionConstants::archiveCapacity == 100);
 }
 
