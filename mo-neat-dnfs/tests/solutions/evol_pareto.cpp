@@ -85,17 +85,24 @@ namespace
         return { individual.at("objectives").get<std::vector<double>>(), individual.at("violation").get<double>() };
     }
 
-    void requireRanksConsistentWithDominance(const nlohmann::json& record, const double epsilon)
+    // The recorded ranks are exactly nonDominatedSort() of the recorded points. Checking
+    // "a dominates b => a ranks lower" instead would be wrong: with epsilon and the violation
+    // tie band, dominance can be cyclic, and the sort's documented fallback then puts
+    // points that dominate each other on one front.
+    void requireRanksMatchTheSort(const nlohmann::json& record, const double epsilon, const double violationEpsilon)
     {
         const auto& individuals = record.at("individuals");
-        for (const auto& dominator : individuals)
+        std::vector<RankedPoint> points;
+        for (const auto& individual : individuals)
         {
-            for (const auto& dominated : individuals)
+            points.push_back(rankedPointOf(individual));
+        }
+        const auto fronts = nonDominatedSort(points, epsilon, violationEpsilon);
+        for (size_t rank = 0; rank < fronts.size(); ++rank)
+        {
+            for (const size_t index : fronts[rank])
             {
-                if (constrainedDominates(rankedPointOf(dominator), rankedPointOf(dominated), epsilon))
-                {
-                    REQUIRE(dominator.at("rank").get<int>() < dominated.at("rank").get<int>());
-                }
+                REQUIRE(individuals[index].at("rank").get<size_t>() == rank);
             }
         }
     }
@@ -155,7 +162,8 @@ namespace
                 REQUIRE(record.at("mode") == "pareto");
                 REQUIRE(record.at("objectiveGroups").get<std::vector<std::vector<size_t>>>() == SelectionConstants::objectiveGroups);
                 REQUIRE(static_cast<int>(record.at("individuals").size()) == settings.populationSize);
-                requireRanksConsistentWithDominance(record, SelectionConstants::dominanceEpsilon);
+                requireRanksMatchTheSort(record, SelectionConstants::dominanceEpsilon,
+                    SelectionConstants::violationEpsilon);
             }
             requireArchiveFollowsFeasibility(records);
             std::filesystem::remove_all(runDirectory);
@@ -168,13 +176,13 @@ namespace
     }
 }
 
-TEST_CASE("XOR evolves under the pareto-selection preset with ranks consistent with dominance",
+TEST_CASE("XOR evolves under the pareto-selection preset with ranks that match the sort",
     "[Evolution][Solutions][XOR][Pareto]")
 {
     requireParetoEvolutionHolds("xor", "XOR");
 }
 
-TEST_CASE("AND evolves under the pareto-selection preset with ranks consistent with dominance",
+TEST_CASE("AND evolves under the pareto-selection preset with ranks that match the sort",
     "[Evolution][Solutions][AND][Pareto]")
 {
     requireParetoEvolutionHolds("and", "AND");

@@ -3,6 +3,7 @@
 #include <array>
 #include <atomic>
 #include <future>
+#include <map>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -149,6 +150,9 @@ namespace neat_dnfs
 		ParetoArchive paretoArchive;
 		/// Ids of the front-0 solutions the archive accepted this generation.
 		std::vector<int> acceptedIntoArchive;
+		/// Each living species' own non-dominated history, keyed by species id: what a
+		/// member has to beat for its species to count as improving in Pareto mode.
+		std::map<int, ParetoArchive> speciesFronts;
 
 		/// @brief What the latest Pareto ranking found beyond the archive's accepted ids:
 		/// the inputs of the archive-empty improvement fallback and of the per-generation
@@ -161,7 +165,7 @@ namespace neat_dnfs
 			/// The smallest constraint violation in the population.
 			double lowestViolation{0.0};
 			/// The archive is empty and lowestViolation fell below every violation offered
-			/// to it before by more than SelectionConstants::dominanceEpsilon.
+			/// to it before by more than SelectionConstants::archiveEpsilon.
 			bool lowestViolationImproved{false};
 		};
 		ParetoRankingSummary rankingSummary;
@@ -249,23 +253,29 @@ namespace neat_dnfs
 			const std::vector<std::vector<size_t>>& fronts, double violationToBeat);
 		/// @brief The Pareto-mode "population improved" signal of the latest ranking.
 		/// @return True if the archive accepted a point, or, while the archive is empty,
-		/// the lowest violation fell by more than SelectionConstants::dominanceEpsilon.
+		/// the lowest violation fell by more than SelectionConstants::archiveEpsilon.
 		[[nodiscard]] bool hasParetoFrontImproved() const;
-		/// @brief The Pareto-mode "species improved" signal of the latest ranking.
-		/// @details Reads @p species' current members, so it must run after speciate() has
-		/// placed them: an archive entry's own species id is the previous generation's.
-		/// @param species The species to check.
-		/// @return True if the archive accepted one of its members, or, under the
-		/// archive-empty fallback, it holds a member with the new lowest violation.
-		[[nodiscard]] bool hasSpeciesImprovedOnTheFront(const Species& species) const;
+		/// @brief The Pareto-mode "species improved" signal: offers @p species' ranked
+		/// members to the species' own front (its non-dominated history).
+		/// @details The species' counterpart of scalar mode's "the champion beat the
+		/// species' best fitness". It reads @p species' current members, so it must run
+		/// after speciate() has placed them.
+		/// @param species The species whose members are offered.
+		/// @return True if its front accepted a member, or, while that front is empty, its
+		/// lowest violation fell by more than SelectionConstants::archiveEpsilon.
+		[[nodiscard]] bool offerSpeciesToItsFront(const Species& species);
+		/// @brief Drops the fronts of species that are no longer in speciesList.
+		void forgetFrontsOfExtinctSpecies();
 		/// @brief Logs the per-generation Pareto DEBUG sentence: fronts, front 0, archive,
 		/// and how many species improved and how many are stagnant.
 		/// @param improvedSpecies Number of species that improved this generation.
 		void logParetoProgress(int improvedSpecies) const;
 		void speciate();
-		/// @brief Picks every species' champion. In scalar mode a species improves when its
-		/// champion's fitness rises; in Pareto mode when hasSpeciesImprovedOnTheFront() says so,
-		/// after which the per-generation Pareto DEBUG sentence is logged.
+		/// @brief Picks every species' champion. A species improves when its champion's
+		/// fitness rises: in scalar mode, and in Pareto mode with StagnationSignal::Fitness.
+		/// In Pareto mode with StagnationSignal::Front it improves when
+		/// offerSpeciesToItsFront() says so. Pareto mode then logs its per-generation
+		/// DEBUG sentence.
 		void assignChampions();
 		void reproduceAndSelect();
 

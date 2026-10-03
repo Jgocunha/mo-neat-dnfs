@@ -34,9 +34,12 @@ Available tasks: `and`, `xor`, `detection-instability`, `memory-instability`,
 Available ablations: `no-growth-io-only`, `no-growth-reference-hidden-field-count`,
 `no-speciation`, `no-crossover`, `random-initial-topology`.
 
-Selection presets, passed through `--ablation` the same way: `pareto-selection` (Pareto
-selection, ε 0.01, feasibility floor 0.1) and `pareto-selection-no-floor` (the same, with
-the floor off).
+Selection presets, passed through `--ablation` the same way: `pareto-selection` and
+`pareto-selection-no-floor` (the same, with the floor off). `pareto-selection` ranks by Pareto
+dominance with ε 0.01 and a feasibility floor of 0.1, breaks ties within a front by weighted
+fitness, and keeps scalar mode's stagnation rules and offspring sharing, so it differs from
+scalar selection only in which solutions survive and breed. These are the settings that held
+up against scalar selection on every task (`.claude/notes/MOO/pareto-tuning-findings.md`).
 
 ## Configuration
 
@@ -51,6 +54,28 @@ settings: the `SelectionConstants` block, each key in it, and `PopulationConstan
 and `saveParetoFront` may be omitted and fall back to their defaults (scalar selection; both
 flags true), so a `--config` file written before they existed keeps loading. A mistyped key inside
 `SelectionConstants` is still an error.
+
+`SelectionConstants` has three tolerances. `dominanceEpsilon` is the ε of the Pareto ranking.
+`archiveEpsilon` is the ε of the archives and of the improvement signals that drive
+stagnation; it absorbs re-evaluation noise, and when it is absent it takes `dominanceEpsilon`'s
+value. `violationEpsilon` makes two infeasible solutions whose total shortfall below
+`feasibilityFloor` differs by less than it compare on their objectives instead; 0 is Deb's
+exact rule.
+
+`SelectionConstants.stagnationSignal` decides what counts as progress for stagnation in Pareto
+mode. `"front"` (the default) counts a point entering the archive (population) or a species'
+own front (species). `"fitness"` uses scalar mode's rules unchanged, so the two modes differ
+only in how they rank.
+
+`SelectionConstants.frontTieBreak` orders two solutions on the same front. `"crowding"` (the
+default, NSGA-II) prefers the larger crowding distance, which spreads the population along the
+front. `"fitness"` prefers the higher weighted fitness, which pushes toward every objective
+being high at once while dominance still keeps specialists off the first front.
+
+`SelectionConstants.offspringAllocation` decides what Pareto mode shares offspring between
+species by. `"rank"` (the default) uses the rank-derived selection fitness, `(fronts - rank) /
+fronts`. `"fitness"` uses the weighted fitness, as scalar mode does, so Pareto dominance only
+decides which members survive and breed within each species.
 
 Each `config/solutions/<task>.json` also sets `SelectionConstants.objectiveGroups`, which
 partitions that task's partial fitnesses into the objectives Pareto selection ranks on (for

@@ -13,6 +13,8 @@ from .parsing import _sample_evenly, compute_mutation_events, compute_partial_fi
 from .experiment import _load_experiment_runs_parsed, compute_experiment_convergence, compute_experiment_totals, compute_partial_fitness_best_only
 from .solution_record import parse_solution_blob
 from .pareto import constraint_violation, correlation_long, format_groups, generation_metrics, non_dominated_sort, numbered_columns, parse_groups, space_for_rows, staircase_2d, summarize_generation, validate_partition
+from .moo_compare import SCALAR_ARM, arm_table, best_trajectory, pair_experiments, run_summary, trajectory_band
+from .plots import chart_arm_final_values, chart_arm_success, chart_arm_trajectories
 from .theme import theme_type
 
 def _clamp(v: float, lo: float, hi: float) -> float:
@@ -1778,18 +1780,24 @@ _EPSILON_MAX = 0.49
 _FLOOR_MAX = 0.99
 
 
-def _recorded_settings(recorded) -> tuple[list[list[int]], float, float]:
+def _recorded_settings(recorded) -> tuple[list[list[int]], float, float, float]:
     if recorded is None:
-        return [], 0.0, 0.0
+        return [], 0.0, 0.0, 0.0
     settings = recorded.settings
-    return [list(g) for g in settings["objective_groups"]], float(settings["epsilon"]), float(settings["feasibility_floor"])
+    return (
+        [list(g) for g in settings["objective_groups"]],
+        float(settings["epsilon"]),
+        float(settings["feasibility_floor"]),
+        float(settings.get("violation_epsilon", 0.0)),
+    )
 
 
-def _render_space_settings(partial_count: int, recorded, key_prefix: str) -> tuple[list[list[int]], float, float] | None:
-    """Grouping, epsilon and feasibility-floor controls, defaulting to the run's recorded values
-    (or raw partials / 0 / 0 for an older run). Returns None when the grouping text is invalid."""
-    default_groups, default_epsilon, default_floor = _recorded_settings(recorded)
-    col_groups, col_epsilon, col_floor = st.columns([2, 1, 1])
+def _render_space_settings(partial_count: int, recorded, key_prefix: str) -> tuple[list[list[int]], float, float, float] | None:
+    """Grouping, epsilon, feasibility-floor and violation tie-band controls, defaulting to the
+    run's recorded values (or raw partials / 0 / 0 / 0 for an older run). Returns None when the
+    grouping text is invalid."""
+    default_groups, default_epsilon, default_floor, default_violation_epsilon = _recorded_settings(recorded)
+    col_groups, col_epsilon, col_floor, col_violation = st.columns([2, 1, 1, 1])
     with col_groups:
         groups_text = st.text_input(
             "Objective groups",
@@ -1811,6 +1819,17 @@ def _render_space_settings(partial_count: int, recorded, key_prefix: str) -> tup
             help="A solution with any raw partial below this is infeasible and ranks behind every "
             "feasible one. 0 turns the constraint off.",
         )
+    with col_violation:
+        violation_epsilon = st.slider(
+            "Violation tie band",
+            0.0,
+            _FLOOR_MAX,
+            min(default_violation_epsilon, _FLOOR_MAX),
+            0.005,
+            key=f"{key_prefix}_violation_epsilon",
+            help="Two infeasible solutions whose violations differ by less than this are compared on "
+            "their objectives instead of their violations. 0 is the exact rule.",
+        )
     try:
         groups = parse_groups(groups_text)
     except ValueError as error:
@@ -1820,7 +1839,7 @@ def _render_space_settings(partial_count: int, recorded, key_prefix: str) -> tup
     if problem:
         st.error(f"Objective groups must partition the {partial_count} partials: {problem}.")
         return None
-    return groups, float(epsilon), float(floor)
+    return groups, float(epsilon), float(floor), float(violation_epsilon)
 
 
 def _render_pareto_source_note(recorded) -> None:
@@ -1831,10 +1850,11 @@ def _render_pareto_source_note(recorded) -> None:
             "use plain means, because older runs do not record their fitness weights."
         )
         return
-    groups, epsilon, floor = _recorded_settings(recorded)
+    groups, epsilon, floor, violation_epsilon = _recorded_settings(recorded)
     st.caption(
         f"From `objectives.jsonl`: {recorded.settings['mode']} selection, recorded groups "
-        f"`{format_groups(groups) or 'none (raw partials)'}`, ε {epsilon:g}, floor {floor:g}. "
+        f"`{format_groups(groups) or 'none (raw partials)'}`, ε {epsilon:g}, floor {floor:g}, "
+        f"violation tie band {violation_epsilon:g}. "
         "With these defaults the ranks below reproduce the ones the run recorded."
     )
 
@@ -1940,12 +1960,12 @@ def _objective_pickers(labels: list[str], key_prefix: str) -> tuple[int, int]:
 
 
 @st.cache_data(show_spinner="Ranking the sampled generations...")
-def _cached_front_evolution(run_path: str, groups_key: tuple, epsilon: float, floor: float, generations: tuple,
-                            x_index: int, y_index: int) -> tuple[pd.DataFrame, pd.DataFrame]:
+def _cached_front_evolution(run_path: str, groups_key: tuple, epsilon: float, floor: float, violation_epsilon: float,
+                            generations: tuple, x_index: int, y_index: int) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Front 0 of each sampled generation on the chosen pair (points and 2-D staircase). Cached:
     it re-ranks every sampled generation, and the fragment reruns on every widget change."""
     individuals, recorded = load_pareto_population(run_path)
-    recorded_groups, _, _ = _recorded_settings(recorded)
+    recorded_groups, *_ = _recorded_settings(recorded)
     groups = [list(g) for g in groups_key]
     points, steps = [], []
     for generation in generations:
@@ -1953,7 +1973,7 @@ def _cached_front_evolution(run_path: str, groups_key: tuple, epsilon: float, fl
         space = space_for_rows(members, groups, recorded_groups)
         partials = members[numbered_columns(members, "p")].to_numpy()
         violations = constraint_violation(partials, floor)
-        ranks = non_dominated_sort(np.clip(space.values, 0, 1), epsilon, violations)
+        ranks = non_dominated_sort(np.clip(space.values, 0, 1), epsilon, violations, violation_epsilon)
         xy = space.values[ranks == 0][:, [x_index, y_index]]
         points.append(pd.DataFrame(xy, columns=["x", "y"]).assign(gen_display=display_gen(generation)))
         steps.append(_staircase_frame(xy).assign(gen_display=display_gen(generation)))
@@ -1961,11 +1981,12 @@ def _cached_front_evolution(run_path: str, groups_key: tuple, epsilon: float, fl
 
 
 @st.cache_data(show_spinner="Ranking the sampled generations...")
-def _cached_generation_metrics(run_path: str, groups_key: tuple, epsilon: float, floor: float, generations: tuple) -> pd.DataFrame:
+def _cached_generation_metrics(run_path: str, groups_key: tuple, epsilon: float, floor: float, violation_epsilon: float,
+                               generations: tuple) -> pd.DataFrame:
     individuals, recorded = load_pareto_population(run_path)
-    recorded_groups, _, _ = _recorded_settings(recorded)
+    recorded_groups, *_ = _recorded_settings(recorded)
     groups = [list(g) for g in groups_key]
-    return generation_metrics(individuals, generations, groups, recorded_groups, epsilon, floor)
+    return generation_metrics(individuals, generations, groups, recorded_groups, epsilon, floor, violation_epsilon)
 
 
 def _render_front0_table(members: pd.DataFrame, space, summary: dict, run_path: str, generation0: int, key_prefix: str) -> None:
@@ -2030,17 +2051,17 @@ def _render_generation_charts(members: pd.DataFrame, space, summary: dict, mode:
 def _render_over_generations(run_path: str, generations: list[int], settings: tuple, labels: list[str],
                              axis: tuple[int, int], mode: str, key_prefix: str) -> None:
     """Front 0 of sampled generations on the chosen pair, and the headline metrics over time."""
-    groups, epsilon, floor = settings
+    groups, epsilon, floor, violation_epsilon = settings
     groups_key = tuple(tuple(g) for g in groups)
     x_index, y_index = axis
     st.markdown("### Over generations")
     step, _ = _render_sampling_controls(f"{key_prefix}_sampling", len(generations), include_max_solutions=False)
     sampled = tuple(_sampled_generations(generations, step))
 
-    points, steps = _cached_front_evolution(run_path, groups_key, epsilon, floor, sampled, x_index, y_index)
+    points, steps = _cached_front_evolution(run_path, groups_key, epsilon, floor, violation_epsilon, sampled, x_index, y_index)
     st.altair_chart(chart_front_evolution(points, steps, labels[x_index], labels[y_index], mode), width="stretch")
 
-    metrics = _cached_generation_metrics(run_path, groups_key, epsilon, floor, sampled)
+    metrics = _cached_generation_metrics(run_path, groups_key, epsilon, floor, violation_epsilon, sampled)
     metrics_long = metrics.melt(id_vars="gen_display", var_name="metric", value_name="value")
     if len(labels) > 3:
         metrics_long["metric"] = metrics_long["metric"].replace({"hypervolume": "hypervolume (estimate)"})
@@ -2074,7 +2095,7 @@ def render_pareto_view(selected_run_path: str):
 
     partial_columns = numbered_columns(individuals, "p")
     generations = sorted(int(g) for g in individuals["generation"].unique())
-    recorded_groups, _, _ = _recorded_settings(recorded)
+    recorded_groups, *_ = _recorded_settings(recorded)
 
     # Widget state is per run: a key shared across runs would carry the previous run's grouping,
     # epsilon and floor over instead of defaulting to this run's recorded settings.
@@ -2082,14 +2103,14 @@ def render_pareto_view(selected_run_path: str):
     settings = _render_space_settings(len(partial_columns), recorded, key_prefix)
     if settings is None:
         return
-    groups, epsilon, floor = settings
+    groups, epsilon, floor, violation_epsilon = settings
     generation0 = _generation_slider(generations, f"{key_prefix}_generation")
 
     members = individuals[individuals["generation"] == generation0].reset_index(drop=True)
     _warn_if_outside_unit_interval(members)
     space = space_for_rows(members, groups, recorded_groups)
     partials = members[partial_columns].to_numpy()
-    summary = summarize_generation(space.values, partials, members["fitness"].to_numpy(), epsilon, floor)
+    summary = summarize_generation(space.values, partials, members["fitness"].to_numpy(), epsilon, floor, violation_epsilon)
     _render_pareto_kpis(summary, space, len(members), floor, _archive_size(recorded, generation0))
 
     st.divider()
@@ -2100,7 +2121,7 @@ def render_pareto_view(selected_run_path: str):
         axis = _render_generation_charts(members, space, summary, mode, key_prefix)
 
         st.divider()
-        _render_over_generations(selected_run_path, generations, (groups, epsilon, floor), space.labels, axis, mode, key_prefix)
+        _render_over_generations(selected_run_path, generations, settings, space.labels, axis, mode, key_prefix)
 
         st.divider()
         _render_objective_conflict(individuals, groups, recorded_groups, space.labels, mode)
@@ -2110,18 +2131,19 @@ def render_pareto_view(selected_run_path: str):
     _render_front0_table(members, space, summary, selected_run_path, generation0, key_prefix)
 
 
-def _final_front(run_path: str, partial_count: int, groups: list[list[int]], epsilon: float, floor: float):
+def _final_front(run_path: str, partial_count: int, groups: list[list[int]], epsilon: float, floor: float,
+                 violation_epsilon: float):
     """(objective values, summary, labels) of a run's last generation, or None when the run has
     no objective data or a different partial count (another task: its hypervolume would live in
     a different objective space)."""
     individuals, recorded = load_pareto_population(run_path)
     if individuals.empty or len(numbered_columns(individuals, "p")) != partial_count:
         return None
-    recorded_groups, _, _ = _recorded_settings(recorded)
+    recorded_groups, *_ = _recorded_settings(recorded)
     members = individuals[individuals["generation"] == individuals["generation"].max()]
     space = space_for_rows(members, groups, recorded_groups)
     partials = members[numbered_columns(members, "p")].to_numpy()
-    summary = summarize_generation(space.values, partials, members["fitness"].to_numpy(), epsilon, floor)
+    summary = summarize_generation(space.values, partials, members["fitness"].to_numpy(), epsilon, floor, violation_epsilon)
     return space.values, summary, space.labels
 
 
@@ -2157,11 +2179,11 @@ def render_experiment_pareto(base_dir_str: str):
     settings = _render_space_settings(partial_count, recorded, key_prefix)
     if settings is None:
         return
-    groups, epsilon, floor = settings
+    groups, epsilon, floor, violation_epsilon = settings
 
     hv_rows, point_frames, labels, estimate = [], [], None, False
     for path in run_paths:
-        final = _final_front(str(path), partial_count, groups, epsilon, floor)
+        final = _final_front(str(path), partial_count, groups, epsilon, floor, violation_epsilon)
         if final is None:
             continue
         values, summary, labels = final
@@ -2197,13 +2219,13 @@ def render_cross_experiment_pareto(selected_names: list[str], experiment_paths: 
     settings = _render_space_settings(partial_count, recorded, "compare_pareto")
     if settings is None:
         return
-    groups, epsilon, floor = settings
+    groups, epsilon, floor, violation_epsilon = settings
 
     plottable, skipped = {}, []
     for name in selected_names:
         values = []
         for _, path in find_runs_with_overview(experiment_paths[name]):
-            final = _final_front(str(path), partial_count, groups, epsilon, floor)
+            final = _final_front(str(path), partial_count, groups, epsilon, floor, violation_epsilon)
             if final is not None:
                 values.append(final[1]["hypervolume"])
         if values:
@@ -2229,3 +2251,165 @@ def render_cross_experiment_pareto(selected_names: list[str], experiment_paths: 
         rows.append({"experiment": name, "n": len(vals), "U": u, "p-value": p})
     st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
     st.caption(f"Final hypervolume vs. **{reference_name}**. Normal-approximation p-value; indicative only for small n.")
+
+
+# ---------------------------------------------------------------------------------------------
+# Scalar vs Pareto page
+# ---------------------------------------------------------------------------------------------
+
+_VERDICT_BADGES = {
+    "better": (":material/arrow_upward:", "green"),
+    "comparable": (":material/drag_handle:", "gray"),
+    "mixed": (":material/swap_vert:", "orange"),
+    "worse": (":material/arrow_downward:", "red"),
+}
+
+
+def _file_stamp(path: Path) -> float:
+    return path.stat().st_mtime if path.exists() else 0.0
+
+
+@st.cache_data(show_spinner=False)
+def _cached_run_summary(run_path: str, target: float, overview_stamp: float, objectives_stamp: float):
+    return run_summary(Path(run_path), target)
+
+
+@st.cache_data(show_spinner=False)
+def _cached_best_trajectory(run_path: str, overview_stamp: float) -> pd.DataFrame:
+    return best_trajectory(Path(run_path))
+
+
+def _arm_runs(experiment_path: Path, target: float) -> list[tuple[str, Path, dict]]:
+    runs = []
+    for name, path in find_runs_with_overview(experiment_path):
+        summary = _cached_run_summary(str(path), target, _file_stamp(path / "overview.jsonl"),
+                                      _file_stamp(path / "objectives.jsonl"))
+        if summary is not None:
+            runs.append((name, path, summary))
+    return runs
+
+
+def _render_verdict_badges(tables: dict[str, pd.DataFrame]) -> None:
+    columns = st.columns(min(len(tables), 3))
+    for index, (task, table) in enumerate(tables.items()):
+        scalar = table[table["arm"] == SCALAR_ARM].iloc[0]
+        with columns[index % len(columns)]:
+            st.markdown(f"**{task}**")
+            for _, row in table[table["arm"] != SCALAR_ARM].iterrows():
+                icon, color = _VERDICT_BADGES[row["verdict"]]
+                st.badge(f"{row['arm']}: {row['verdict']}", icon=icon, color=color)
+                st.caption(
+                    f"success {row['success rate']:.0%} vs {scalar['success rate']:.0%} scalar, "
+                    f"best generalist {row['best generalist']:.3f} vs {scalar['best generalist']:.3f}"
+                )
+
+
+def _collect_scalar_vs_pareto(tasks: dict, selected: list[str], experiments: dict, target: float) -> dict:
+    """Per-run summaries and per-generation bands for every selected task and arm."""
+    collected = {"tables": {}, "success": [], "finals": [], "fitness_bands": [], "partial_bands": []}
+    for task in selected:
+        runs_by_arm = {}
+        for arm, experiment_name in tasks[task].items():
+            runs = _arm_runs(experiments[experiment_name], target)
+            if not runs:
+                continue
+            runs_by_arm[arm] = [summary for _, _, summary in runs]
+            successes = sum(summary["success"] for _, _, summary in runs)
+            collected["success"].append({"task": task, "arm": arm, "success_rate": successes / len(runs),
+                                         "label": f"{successes}/{len(runs)}"})
+            collected["finals"].extend({"task": task, "arm": arm, "run": name, **summary} for name, _, summary in runs)
+            trajectories = [_cached_best_trajectory(str(path), _file_stamp(path / "overview.jsonl")) for _, path, _ in runs]
+            collected["fitness_bands"].append(trajectory_band(trajectories, "best_fitness").assign(task=task, arm=arm))
+            collected["partial_bands"].append(trajectory_band(trajectories, "best_min_partial").assign(task=task, arm=arm))
+        if SCALAR_ARM in runs_by_arm and len(runs_by_arm) > 1:
+            collected["tables"][task] = arm_table(runs_by_arm)
+    return collected
+
+
+def _render_per_task_tables(tables: dict[str, pd.DataFrame]) -> None:
+    for task, table in tables.items():
+        st.markdown(f"**{task}**")
+        st.dataframe(
+            table,
+            hide_index=True,
+            width="stretch",
+            column_config={
+                "success rate": st.column_config.NumberColumn(format="percent"),
+                "median generations to success": st.column_config.NumberColumn(format="%.1f"),
+                "final best fitness": st.column_config.NumberColumn(format="%.3f"),
+                "best's lowest partial": st.column_config.NumberColumn(format="%.3f"),
+                "best generalist": st.column_config.NumberColumn(format="%.3f"),
+                "feasible hypervolume": st.column_config.NumberColumn(format="%.3f"),
+            },
+        )
+
+
+def render_scalar_vs_pareto_view(data_root_str: str):
+    """Every task's scalar experiment against its Pareto arm(s): did multi-objective selection
+    find complete solutions more often, and how did the search get there?"""
+    st.caption(
+        "Pairs each task's scalar experiment (for example `AND`) with the experiments named after it "
+        "(`AND Pareto`). A run **succeeds** when its best solution scores above the target on *every* "
+        "partial fitness: the same rule that ends evolution early."
+    )
+    experiments = dict(find_experiment_dirs(Path(data_root_str).expanduser()))
+    tasks = pair_experiments(list(experiments))
+    if not tasks:
+        st.info("No task here has both a scalar experiment and a Pareto one (for example `AND` and `AND Pareto`).")
+        return
+
+    col_tasks, col_target = st.columns([3, 1])
+    selected = col_tasks.multiselect("Tasks", list(tasks), default=list(tasks), key="svp_tasks")
+    target = col_target.number_input("Target (every partial)", 0.0, 1.0, 0.95, 0.01, key="svp_target")
+    if not selected:
+        return
+
+    arms = [SCALAR_ARM] + sorted({arm for task in selected for arm in tasks[task]} - {SCALAR_ARM})
+    with st.spinner("Reading every run..."):
+        collected = _collect_scalar_vs_pareto(tasks, selected, experiments, target)
+    if not collected["tables"]:
+        st.info("The selected tasks have no runs with `overview.jsonl` and `objectives.jsonl` in both arms.")
+        return
+
+    st.markdown("### Verdict")
+    _render_verdict_badges(collected["tables"])
+    with st.expander("How the verdict is decided", expanded=False):
+        st.markdown(
+            "At α = 0.05: first the success rate (Fisher's exact test). If it does not differ significantly, "
+            "the **best generalist** (the highest *lowest partial* in the final population: the best worst-case "
+            "behaviour any solution reached) and the **final best fitness** (Mann-Whitney U). **better** / "
+            "**worse**: significant in one direction only; **mixed**: significant both ways; **comparable**: "
+            "no significant difference. With a handful of runs per arm, read *comparable* as *not shown "
+            "to differ*."
+        )
+
+    st.divider()
+    mode = theme_type()
+    st.altair_chart(chart_arm_success(pd.DataFrame(collected["success"]), arms, mode), width="stretch")
+
+    st.divider()
+    st.markdown("### How the best solution evolved")
+    st.caption(
+        "Median across runs (line) and interquartile range (band). The weighted fitness is what scalar "
+        "selection maximises. The lowest partial is the scenario the best solution handles worst: a "
+        "specialist scores high on fitness while one partial stays near 0. A run that met the target "
+        "keeps its final value."
+    )
+    st.altair_chart(chart_arm_trajectories(pd.concat(collected["partial_bands"], ignore_index=True), arms,
+                                           "Lowest partial of the best solution", "lowest partial", mode, target), width="content")
+    st.altair_chart(chart_arm_trajectories(pd.concat(collected["fitness_bands"], ignore_index=True), arms,
+                                           "Weighted fitness of the best solution", "fitness", mode), width="content")
+
+    st.divider()
+    st.markdown("### Final population")
+    finals = pd.DataFrame(collected["finals"])
+    st.altair_chart(chart_arm_final_values(finals, arms, "best_generalist", "Best generalist (highest lowest partial)"),
+                    width="content")
+    st.altair_chart(chart_arm_final_values(finals, arms, "feasible_hv", "Hypervolume of the feasible front"),
+                    width="content")
+    st.caption("Feasible: every partial at or above 0.1. Hypervolume is measured in each task's grouped "
+               "objective space (exact for up to 3 objectives).")
+
+    st.divider()
+    st.markdown("### Per-task numbers")
+    _render_per_task_tables(collected["tables"])

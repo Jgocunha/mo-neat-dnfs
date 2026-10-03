@@ -171,6 +171,10 @@
     "objectiveGroups": [],
     "dominanceEpsilon": 0.0,
     "feasibilityFloor": 0.0,
-    "archiveCapacity": 100
+    "archiveCapacity": 100,
+    "violationEpsilon": 0.0,
+    "stagnationSignal": "front",
+    "frontTieBreak": "crowding",
+    "offspringAllocation": "rank"
   }
 }

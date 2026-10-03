@@ -68,6 +68,11 @@ namespace
         SelectionConstants::dominanceEpsilon = 0.2;
         SelectionConstants::feasibilityFloor = 0.3;
         SelectionConstants::archiveCapacity = 5;
+        SelectionConstants::archiveEpsilon = 0.25;
+        SelectionConstants::violationEpsilon = 0.35;
+        SelectionConstants::stagnationSignal = StagnationSignal::Fitness;
+        SelectionConstants::frontTieBreak = FrontTieBreak::Fitness;
+        SelectionConstants::offspringAllocation = OffspringAllocation::Fitness;
     }
 
     // Asserts every selection field holds its compiled-in default.
@@ -78,6 +83,11 @@ namespace
         REQUIRE(SelectionConstants::dominanceEpsilon == 0.0);
         REQUIRE(SelectionConstants::feasibilityFloor == 0.0);
         REQUIRE(SelectionConstants::archiveCapacity == 100);
+        REQUIRE(SelectionConstants::archiveEpsilon == 0.0);
+        REQUIRE(SelectionConstants::violationEpsilon == 0.0);
+        REQUIRE(SelectionConstants::stagnationSignal == StagnationSignal::Front);
+        REQUIRE(SelectionConstants::frontTieBreak == FrontTieBreak::Crowding);
+        REQUIRE(SelectionConstants::offspringAllocation == OffspringAllocation::Rank);
     }
 
     // Restores the default (empty) grouping even when construction throws.
@@ -373,8 +383,14 @@ TEST_CASE("The pareto-selection presets switch on Pareto selection", "[Selection
         REQUIRE(SelectionConstants::feasibilityFloor == 0.0);
     }
 
+    // .claude/notes/MOO/pareto-tuning-findings.md: the settings that held up against scalar.
     REQUIRE(SelectionConstants::mode == SelectionMode::Pareto);
     REQUIRE(SelectionConstants::dominanceEpsilon == Catch::Approx(0.01));
+    REQUIRE(SelectionConstants::archiveEpsilon == Catch::Approx(0.01));
+    REQUIRE(SelectionConstants::violationEpsilon == Catch::Approx(0.01));
+    REQUIRE(SelectionConstants::stagnationSignal == StagnationSignal::Fitness);
+    REQUIRE(SelectionConstants::frontTieBreak == FrontTieBreak::Fitness);
+    REQUIRE(SelectionConstants::offspringAllocation == OffspringAllocation::Fitness);
     REQUIRE(SelectionConstants::archiveCapacity == 100);
 }
 
@@ -410,4 +426,92 @@ TEST_CASE("ConfigLoader reads saveParetoFront from PopulationConstants", "[Selec
     ConfigLoader::loadGlobalConfig(writeTempConfig(config, "save-pareto-front-off.json"));
 
     REQUIRE_FALSE(PopulationConstants::saveParetoFront);
+}
+
+TEST_CASE("ConfigLoader reads archiveEpsilon and violationEpsilon", "[SelectionConfig]")
+{
+    const RestoreReferenceConfig restore;
+
+    loadWithSelectionBlock({
+        { "dominanceEpsilon", 0.0 },
+        { "archiveEpsilon", 0.02 },
+        { "violationEpsilon", 0.03 },
+    }, "tolerances.json");
+
+    REQUIRE(SelectionConstants::dominanceEpsilon == 0.0);
+    REQUIRE(SelectionConstants::archiveEpsilon == Catch::Approx(0.02));
+    REQUIRE(SelectionConstants::violationEpsilon == Catch::Approx(0.03));
+}
+
+TEST_CASE("ConfigLoader defaults archiveEpsilon to dominanceEpsilon and violationEpsilon to 0", "[SelectionConfig]")
+{
+    const RestoreReferenceConfig restore;
+
+    loadWithSelectionBlock({ { "dominanceEpsilon", 0.04 } }, "tolerance-defaults.json");
+
+    REQUIRE(SelectionConstants::archiveEpsilon == Catch::Approx(0.04));
+    REQUIRE(SelectionConstants::violationEpsilon == 0.0);
+}
+
+TEST_CASE("ConfigLoader rejects out-of-range tolerances", "[SelectionConfig]")
+{
+    const RestoreReferenceConfig restore;
+
+    const std::vector<json> invalidBlocks{
+        { { "archiveEpsilon", -0.01 } },
+        { { "archiveEpsilon", 0.5 } },
+        { { "violationEpsilon", -0.01 } },
+        { { "violationEpsilon", 1.0 } },
+    };
+    for (const auto& block : invalidBlocks)
+    {
+        INFO(block.dump());
+        REQUIRE_THROWS_WITH(loadWithSelectionBlock(block, "out-of-range-tolerance.json"),
+            Catch::Matchers::ContainsSubstring(block.begin().key()));
+    }
+}
+
+TEST_CASE("ConfigLoader reads stagnationSignal and rejects an unknown one", "[SelectionConfig]")
+{
+    const RestoreReferenceConfig restore;
+
+    loadWithSelectionBlock({ { "stagnationSignal", "fitness" } }, "stagnation-fitness.json");
+    REQUIRE(SelectionConstants::stagnationSignal == StagnationSignal::Fitness);
+
+    loadWithSelectionBlock({ { "stagnationSignal", "front" } }, "stagnation-front.json");
+    REQUIRE(SelectionConstants::stagnationSignal == StagnationSignal::Front);
+
+    loadWithSelectionBlock(json::object(), "stagnation-default.json");
+    REQUIRE(SelectionConstants::stagnationSignal == StagnationSignal::Front);
+
+    REQUIRE_THROWS_WITH(loadWithSelectionBlock({ { "stagnationSignal", "archive" } }, "stagnation-unknown.json"),
+        Catch::Matchers::ContainsSubstring("stagnationSignal"));
+}
+
+TEST_CASE("ConfigLoader reads frontTieBreak and rejects an unknown one", "[SelectionConfig]")
+{
+    const RestoreReferenceConfig restore;
+
+    loadWithSelectionBlock({ { "frontTieBreak", "fitness" } }, "tie-break-fitness.json");
+    REQUIRE(SelectionConstants::frontTieBreak == FrontTieBreak::Fitness);
+
+    loadWithSelectionBlock(json::object(), "tie-break-default.json");
+    REQUIRE(SelectionConstants::frontTieBreak == FrontTieBreak::Crowding);
+
+    REQUIRE_THROWS_WITH(loadWithSelectionBlock({ { "frontTieBreak", "age" } }, "tie-break-unknown.json"),
+        Catch::Matchers::ContainsSubstring("frontTieBreak"));
+}
+
+TEST_CASE("ConfigLoader reads offspringAllocation and rejects an unknown one", "[SelectionConfig]")
+{
+    const RestoreReferenceConfig restore;
+
+    loadWithSelectionBlock({ { "offspringAllocation", "fitness" } }, "allocation-fitness.json");
+    REQUIRE(SelectionConstants::offspringAllocation == OffspringAllocation::Fitness);
+
+    loadWithSelectionBlock(json::object(), "allocation-default.json");
+    REQUIRE(SelectionConstants::offspringAllocation == OffspringAllocation::Rank);
+
+    REQUIRE_THROWS_WITH(loadWithSelectionBlock({ { "offspringAllocation", "species" } }, "allocation-unknown.json"),
+        Catch::Matchers::ContainsSubstring("offspringAllocation"));
 }

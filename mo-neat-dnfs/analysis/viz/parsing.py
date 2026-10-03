@@ -301,7 +301,7 @@ def find_experiment_dirs(data_root: Path):
     return experiments
 
 
-_RUN_TIMESTAMP_RE = re.compile(r"^(\d{4})-(\d{2})-(\d{2}) (\d{2})h(\d{2})m(\d{2})s$")
+_RUN_TIMESTAMP_RE = re.compile(r"^(\d{4})-(\d{2})-(\d{2}) (\d{2})h(\d{2})m(\d{2})s( \(\d+\))?$")
 
 
 def prettify_run_timestamp(dir_name: str) -> str:
@@ -310,12 +310,13 @@ def prettify_run_timestamp(dir_name: str) -> str:
     m = _RUN_TIMESTAMP_RE.match(dir_name)
     if not m:
         return dir_name
-    year, month, day, hour, minute, _second = (int(x) for x in m.groups())
+    year, month, day, hour, minute, _second = (int(x) for x in m.groups()[:6])
     try:
         dt = datetime.datetime(year, month, day, hour, minute)
     except ValueError:
         return dir_name
-    return dt.strftime("%b %d, %H:%M")
+    # A run that started in the same second as the previous one carries a " (2)" suffix.
+    return dt.strftime("%b %d, %H:%M") + (m.group(7) or "")
 
 
 @st.cache_data
@@ -675,6 +676,10 @@ def load_objectives(run_dir_str: str) -> RecordedObjectives | None:
                 settings = {
                     "mode": record["mode"],
                     "epsilon": record["epsilon"],
+                    # Absent before the tolerances were split: the archive then used epsilon,
+                    # and violations were compared exactly.
+                    "archive_epsilon": record.get("archiveEpsilon", record["epsilon"]),
+                    "violation_epsilon": record.get("violationEpsilon", 0.0),
                     "feasibility_floor": record["feasibilityFloor"],
                     "objective_groups": record["objectiveGroups"],
                 }

@@ -153,6 +153,65 @@ TEST_CASE("constrainedDominates", "[Pareto]")
     }
 }
 
+TEST_CASE("constrainedDominates with a violation tolerance", "[Pareto]")
+{
+    constexpr double violationEpsilon = 0.01;
+
+    SECTION("infeasible points whose violations differ by less than the tolerance compare by objectives")
+    {
+        const RankedPoint better{ { 0.9, 0.8 }, 0.1005 };
+        const RankedPoint worse{ { 0.2, 0.3 }, 0.1 };
+        REQUIRE(constrainedDominates(better, worse, 0.0, violationEpsilon));
+        REQUIRE_FALSE(constrainedDominates(worse, better, 0.0, violationEpsilon));
+    }
+
+    SECTION("equal violations compare by objectives, and mutually non-dominated points tie")
+    {
+        const RankedPoint first{ { 0.9, 0.1 }, 0.1 };
+        const RankedPoint second{ { 0.1, 0.9 }, 0.1 };
+        REQUIRE_FALSE(constrainedDominates(first, second, 0.0, violationEpsilon));
+        REQUIRE_FALSE(constrainedDominates(second, first, 0.0, violationEpsilon));
+    }
+
+    SECTION("violations differing by at least the tolerance still decide alone")
+    {
+        const RankedPoint smallerViolation{ { 0.0, 0.0 }, 0.1 };
+        const RankedPoint largerViolation{ { 1.0, 1.0 }, 0.12 };
+        REQUIRE(constrainedDominates(smallerViolation, largerViolation, 0.0, violationEpsilon));
+        REQUIRE_FALSE(constrainedDominates(largerViolation, smallerViolation, 0.0, violationEpsilon));
+    }
+
+    SECTION("a feasible point still beats an infeasible one inside the tolerance")
+    {
+        const RankedPoint feasible{ { 0.1, 0.1 }, 0.0 };
+        const RankedPoint barelyInfeasible{ { 1.0, 1.0 }, 0.001 };
+        REQUIRE(constrainedDominates(feasible, barelyInfeasible, 0.0, violationEpsilon));
+        REQUIRE_FALSE(constrainedDominates(barelyInfeasible, feasible, 0.0, violationEpsilon));
+    }
+
+    SECTION("a zero tolerance is the plain rule")
+    {
+        const RankedPoint first{ { 1.0, 1.0 }, 0.2 };
+        const RankedPoint second{ { 0.0, 0.0 }, 0.2 };
+        REQUIRE_FALSE(constrainedDominates(first, second, 0.0, 0.0));
+        REQUIRE(constrainedDominates(first, second, 0.0) == constrainedDominates(first, second, 0.0, 0.0));
+    }
+}
+
+TEST_CASE("nonDominatedSort orders near-equal infeasible points by their objectives", "[Pareto]")
+{
+    const std::vector<RankedPoint> points{
+        { { 0.2, 0.2 }, 0.1 },     // 0: dominated by 1 once violations tie
+        { { 0.9, 0.9 }, 0.1002 },  // 1
+        { { 0.5, 0.5 }, 0.3 },     // 2: clearly larger violation
+    };
+
+    const std::vector<std::vector<size_t>> plainRule{ { 0 }, { 1 }, { 2 } };
+    REQUIRE(nonDominatedSort(points, 0.0) == plainRule);
+    const std::vector<std::vector<size_t>> withTolerance{ { 1 }, { 0 }, { 2 } };
+    REQUIRE(nonDominatedSort(points, 0.0, 0.01) == withTolerance);
+}
+
 TEST_CASE("nonDominatedSort on a known two-objective set", "[Pareto]")
 {
     const auto points = feasiblePoints({

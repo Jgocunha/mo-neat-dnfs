@@ -1106,3 +1106,72 @@ def chart_front_union(points: pd.DataFrame, union_staircase: pd.DataFrame, x_tit
         x="x:Q", y="y:Q", opacity=alt.Opacity("series:N", title=None)
     )
     return alt.layer(dots, line).properties(title="Final fronts across runs", height=theme.CHART_HEIGHT_TALL).interactive()
+
+
+# --- Scalar vs Pareto page ------------------------------------------------------------------
+
+def _arm_color(arms: list[str]) -> alt.Color:
+    """Color keyed by arm in the page's fixed order (scalar first), so an arm keeps its color
+    whatever else is selected."""
+    return alt.Color("arm:N", title="arm", scale=alt.Scale(domain=arms, range=theme.ARM_SLOTS[:len(arms)]),
+                     legend=alt.Legend(orient="top"))
+
+
+def chart_arm_success(success: pd.DataFrame, arms: list[str], mode: str):
+    """Success rate (every partial above the target) per task and arm, as bars with the k/n count."""
+    base = alt.Chart(success).encode(
+        y=alt.Y("task:N", title=None, axis=alt.Axis(labelLimit=240)),
+        yOffset=alt.YOffset("arm:N", sort=arms),
+        # The domain runs past 100% so a full bar still has room for its "k/n" label.
+        x=alt.X("success_rate:Q", title="runs that met the target on every partial",
+                axis=alt.Axis(format="%", values=[0, 0.25, 0.5, 0.75, 1.0]), scale=alt.Scale(domain=[0, 1.12])),
+        tooltip=[alt.Tooltip("task:N"), alt.Tooltip("arm:N"), alt.Tooltip("label:N", title="successful runs"),
+                 alt.Tooltip("success_rate:Q", title="success rate", format=".0%")],
+    )
+    bars = base.mark_bar(cornerRadiusEnd=4, height={"band": 0.8}).encode(color=_arm_color(arms))
+    labels = base.mark_text(align="left", dx=4, color=TEXT_INK[mode]).encode(text="label:N")
+    return alt.layer(bars, labels).properties(title="Success rate", height=alt.Step(14))
+
+
+def chart_arm_trajectories(bands: pd.DataFrame, arms: list[str], title: str, y_title: str, mode: str,
+                           target: float | None = None):
+    """Median (line) and interquartile range (band) across runs per generation, one panel per task."""
+    color = _arm_color(arms)
+    band = alt.Chart().mark_area(opacity=0.18).encode(
+        x=alt.X("generation:Q", title="generation"), y=alt.Y("q1:Q", title=y_title), y2="q3:Q", color=color)
+    line = alt.Chart().mark_line(strokeWidth=2).encode(
+        x="generation:Q", y="median:Q", color=color,
+        tooltip=[alt.Tooltip("arm:N"), alt.Tooltip("generation:Q"), alt.Tooltip("median:Q", format=".3f"),
+                 alt.Tooltip("q1:Q", title="25th percentile", format=".3f"), alt.Tooltip("q3:Q", title="75th percentile", format=".3f")],
+    )
+    layers = [band, line]
+    if target is not None:
+        layers.append(alt.Chart().mark_rule(strokeDash=[4, 4], color=TEXT_INK[mode], opacity=0.6).encode(
+            y=alt.datum(target)))
+    return (
+        alt.layer(*layers, data=bands)
+        .properties(width=260, height=180)
+        .facet(facet=alt.Facet("task:N", title=None), columns=3)
+        .resolve_scale(x="independent")
+        .properties(title=title)
+    )
+
+
+def chart_arm_final_values(finals: pd.DataFrame, arms: list[str], value: str, title: str):
+    """Every run's final value as a dot, with the arm's median as a tick, one panel per task."""
+    color = _arm_color(arms)
+    dots = alt.Chart().mark_circle(size=64, opacity=0.75).encode(
+        x=alt.X("arm:N", sort=arms, title=None, axis=alt.Axis(labelAngle=0)),
+        y=alt.Y(f"{value}:Q", title=title, scale=alt.Scale(domain=[0, 1])),
+        xOffset=alt.XOffset("jitter:Q"),
+        color=color,
+        tooltip=[alt.Tooltip("arm:N"), alt.Tooltip("run:N"), alt.Tooltip(f"{value}:Q", format=".3f")],
+    ).transform_calculate(jitter="random()")
+    medians = alt.Chart().mark_tick(thickness=3, size=36).encode(
+        x=alt.X("arm:N", sort=arms), y=f"median({value}):Q", color=color)
+    return (
+        alt.layer(dots, medians, data=finals)
+        .properties(width=200, height=200)
+        .facet(facet=alt.Facet("task:N", title=None), columns=3)
+        .properties(title=title)
+    )

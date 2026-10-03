@@ -36,6 +36,9 @@ CATEGORICAL_CYCLE = [
 # neutral. Neutrals and the diverging midpoint are per mode, since one gray cannot recede on
 # both a white and a near-black surface.
 SPECIES_SLOTS = ["#0072B2", "#009E73", "#D55E00"]
+# Scalar-vs-Pareto page: the scalar arm is always blue and the first other arm vermillion (the pair
+# passes every colorblind and contrast check in both modes); a third arm takes green.
+ARM_SLOTS = ["#0072B2", "#D55E00", "#009E73"]
 NEUTRAL_STRONG = {"light": "#8C8C8C", "dark": "#8B929C"}
 NEUTRAL_WEAK = {"light": "#C8C8C8", "dark": "#454B55"}
 DIVERGING_NEGATIVE = COLOR_BEST

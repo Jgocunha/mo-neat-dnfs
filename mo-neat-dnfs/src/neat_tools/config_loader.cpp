@@ -1,4 +1,6 @@
 #include "neat_tools/config_loader.h"
+#include <algorithm>
+#include <array>
 
 #include <format>
 #include <fstream>
@@ -6,6 +8,7 @@
 #include <mutex>
 #include <set>
 #include <stdexcept>
+#include <string_view>
 
 #include "constants.h"
 #include "neat_tools/resource_paths.h"
@@ -178,20 +181,47 @@ namespace neat_dnfs
 			}
 		}
 
-		// The config spells the mode as a lowercase string; anything else is a typo
-		// that must not silently fall back to scalar selection.
-		SelectionMode parseSelectionMode(const std::string& name)
+		/// One spelling a SelectionConstants enum field accepts in the config.
+		template <typename Enum>
+		struct NamedChoice
 		{
-			if (name == "scalar")
+			std::string_view name;
+			Enum value;
+		};
+
+		constexpr std::array<NamedChoice<SelectionMode>, 2> selectionModes{ {
+			{ "scalar", SelectionMode::Scalar }, { "pareto", SelectionMode::Pareto } } };
+		constexpr std::array<NamedChoice<StagnationSignal>, 2> stagnationSignals{ {
+			{ "front", StagnationSignal::Front }, { "fitness", StagnationSignal::Fitness } } };
+		constexpr std::array<NamedChoice<FrontTieBreak>, 2> frontTieBreaks{ {
+			{ "crowding", FrontTieBreak::Crowding }, { "fitness", FrontTieBreak::Fitness } } };
+		constexpr std::array<NamedChoice<OffspringAllocation>, 2> offspringAllocations{ {
+			{ "rank", OffspringAllocation::Rank }, { "fitness", OffspringAllocation::Fitness } } };
+
+		// Reads an optional enum field spelled as one of `choices`. An unknown spelling is a
+		// typo, and must not silently fall back to the default.
+		template <typename Enum, size_t Count>
+		void readChoice(const nlohmann::json& block, const char* key,
+			const std::array<NamedChoice<Enum>, Count>& choices, Enum* target)
+		{
+			if (!block.contains(key))
 			{
-				return SelectionMode::Scalar;
+				return;
 			}
-			if (name == "pareto")
+			const auto name = block.at(key).get<std::string>();
+			const auto match = std::ranges::find(choices, std::string_view(name), &NamedChoice<Enum>::name);
+			if (match != choices.end())
 			{
-				return SelectionMode::Pareto;
+				*target = match->value;
+				return;
 			}
-			throw std::runtime_error("ConfigLoader: SelectionConstants.mode '" + name
-				+ "' is unknown; expected \"scalar\" or \"pareto\".");
+			std::string expected;
+			for (const auto& choice : choices)
+			{
+				expected += std::format("{}\"{}\"", expected.empty() ? "" : " or ", choice.name);
+			}
+			throw std::runtime_error(std::format("ConfigLoader: SelectionConstants.{} '{}' is unknown; expected {}.",
+				key, name, expected));
 		}
 
 		// Throws naming the key when value is outside [min, maxExclusive).
@@ -213,6 +243,7 @@ namespace neat_dnfs
 		{
 			static const std::set<std::string> known = {
 				"mode", "objectiveGroups", "dominanceEpsilon", "feasibilityFloor", "archiveCapacity",
+				"archiveEpsilon", "violationEpsilon", "stagnationSignal", "frontTieBreak", "offspringAllocation",
 			};
 			for (const auto& item : block.items())
 			{
@@ -242,10 +273,7 @@ namespace neat_dnfs
 					+ std::string(block.type_name()) + ".");
 			}
 			checkNoUnknownSelectionKeys(block);
-			if (block.contains("mode"))
-			{
-				SelectionConstants::mode = parseSelectionMode(block.at("mode").get<std::string>());
-			}
+			readChoice(block, "mode", selectionModes, &SelectionConstants::mode);
 			if (block.contains("objectiveGroups"))
 			{
 				ConfigLoader::field(block, "objectiveGroups", &SelectionConstants::objectiveGroups);
@@ -254,6 +282,16 @@ namespace neat_dnfs
 			{
 				ConfigLoader::field(block, "dominanceEpsilon", &SelectionConstants::dominanceEpsilon);
 				requireInRange("dominanceEpsilon", SelectionConstants::dominanceEpsilon, 0.0, 0.5);
+			}
+			SelectionConstants::archiveEpsilon = block.value("archiveEpsilon", SelectionConstants::dominanceEpsilon);
+			requireInRange("archiveEpsilon", SelectionConstants::archiveEpsilon, 0.0, 0.5);
+			readChoice(block, "offspringAllocation", offspringAllocations, &SelectionConstants::offspringAllocation);
+			readChoice(block, "frontTieBreak", frontTieBreaks, &SelectionConstants::frontTieBreak);
+			readChoice(block, "stagnationSignal", stagnationSignals, &SelectionConstants::stagnationSignal);
+			if (block.contains("violationEpsilon"))
+			{
+				ConfigLoader::field(block, "violationEpsilon", &SelectionConstants::violationEpsilon);
+				requireInRange("violationEpsilon", SelectionConstants::violationEpsilon, 0.0, 1.0);
 			}
 			if (block.contains("feasibilityFloor"))
 			{

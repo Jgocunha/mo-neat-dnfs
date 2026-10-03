@@ -631,7 +631,9 @@ namespace neat_dnfs
 
 	double Solution::getSelectionFitness() const
 	{
-		return SelectionConstants::mode == SelectionMode::Pareto ? parameters.selectionFitness : parameters.fitness;
+		const bool rankDerived = SelectionConstants::mode == SelectionMode::Pareto
+			&& SelectionConstants::offspringAllocation == OffspringAllocation::Rank;
+		return rankDerived ? parameters.selectionFitness : parameters.fitness;
 	}
 
 	namespace
@@ -651,8 +653,15 @@ namespace neat_dnfs
 		}
 		const int front = frontOrLast(parameters);
 		const int otherFront = frontOrLast(other.parameters);
-		return front < otherFront
-			|| (front == otherFront && parameters.crowdingDistance > other.parameters.crowdingDistance);
+		if (front != otherFront)
+		{
+			return front < otherFront;
+		}
+		if (SelectionConstants::frontTieBreak == FrontTieBreak::Fitness)
+		{
+			return parameters.fitness > other.parameters.fitness;
+		}
+		return parameters.crowdingDistance > other.parameters.crowdingDistance;
 	}
 
 	bool Solution::isEquivalentForSelection(const Solution& other) const
@@ -668,7 +677,9 @@ namespace neat_dnfs
 		const RankedPoint self{ parameters.objectives, parameters.constraintViolation };
 		const RankedPoint peer{ other.parameters.objectives, other.parameters.constraintViolation };
 		const double epsilon = SelectionConstants::dominanceEpsilon;
-		return !constrainedDominates(self, peer, epsilon) && !constrainedDominates(peer, self, epsilon);
+		const double violationEpsilon = SelectionConstants::violationEpsilon;
+		return !constrainedDominates(self, peer, epsilon, violationEpsilon)
+			&& !constrainedDominates(peer, self, epsilon, violationEpsilon);
 	}
 
 	void Solution::addFieldGene(const FieldGene& gene)

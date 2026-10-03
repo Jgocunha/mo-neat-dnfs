@@ -18,7 +18,9 @@ jobs:
   # ── Docs ───────────────────────────────────────────────────────────────────
   docs:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    # Muted: GitHub Pages is not enabled for mo-neat-dnfs yet, so the deploy step
+    # fails. Restore `if: github.ref == 'refs/heads/main'` once Pages is turned on.
+    if: false
     timeout-minutes: 10
     permissions:
       contents: read

@@ -58,12 +58,13 @@ namespace neat_dnfs
 		/// fitness and whether it is still in the final population. When
 		/// PopulationConstants::saveParetoFront is on, also saves the phenotypes of those
 		/// still alive under pareto_front/last_generation/. A member that died earlier is
-		/// on disk under pareto_front/gen <generationFound>/ instead.
+		/// on disk under pareto_front/gen <generationFound + 1>/ instead.
 		void saveParetoArchive() const;
 		/// @brief Saves the phenotype of every archive member in the current generation's
-		/// population under pareto_front/gen <generation>/, numbered like objectives.jsonl.
-		/// Every member is in the population of the generation that found it, so each one
-		/// is saved at least there. Writes nothing (no directory) when none is present.
+		/// population under pareto_front/gen <generation>/, numbered like solutions/gen M:
+		/// one more than the generation objectives.jsonl and generationFound use. Every
+		/// member is in the population of the generation that found it, so each one is
+		/// saved at least there. Writes nothing (no directory) when none is present.
 		void saveParetoFrontForGeneration() const;
 		/// @brief Saves the phenotype of every archive member still in the population.
 		/// @param directoryPath Directory the phenotypes are written to; created only if

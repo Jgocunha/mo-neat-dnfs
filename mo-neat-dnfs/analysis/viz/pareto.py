@@ -34,10 +34,12 @@ def constraint_violation(partials, floor: float) -> np.ndarray:
     return np.clip(floor - partials, 0.0, None).sum(axis=1)
 
 
-def dominance_matrix(objectives, epsilon: float = 0.0, violations=None) -> np.ndarray:
+def dominance_matrix(objectives, epsilon: float = 0.0, violations=None, violation_epsilon: float = 0.0) -> np.ndarray:
     """D[i, j] is True when point i constrained-dominates point j (Deb 2002): feasible beats
     infeasible, the smaller violation wins between infeasible points, and epsilon-dominance
-    decides between feasible ones. With no violations every point is feasible."""
+    decides between feasible ones. Two infeasible points whose violations differ by less than
+    `violation_epsilon` compare by epsilon-dominance too. With no violations every point is
+    feasible."""
     objectives = np.asarray(objectives, dtype=float)
     if len(objectives) == 0:
         return np.zeros((0, 0), dtype=bool)
@@ -50,20 +52,22 @@ def dominance_matrix(objectives, epsilon: float = 0.0, violations=None) -> np.nd
     feasible = violations <= 0
     row_feasible, column_feasible = feasible[:, None], feasible[None, :]
     both_infeasible = ~row_feasible & ~column_feasible
+    violation_tie = np.abs(violations[:, None] - violations[None, :]) < violation_epsilon
     return (
         (row_feasible & column_feasible & pareto)
         | (row_feasible & ~column_feasible)
-        | (both_infeasible & (violations[:, None] < violations[None, :]))
+        | (both_infeasible & violation_tie & pareto)
+        | (both_infeasible & ~violation_tie & (violations[:, None] < violations[None, :]))
     )
 
 
-def non_dominated_sort(objectives, epsilon: float = 0.0, violations=None) -> np.ndarray:
+def non_dominated_sort(objectives, epsilon: float = 0.0, violations=None, violation_epsilon: float = 0.0) -> np.ndarray:
     """NSGA-II fast non-dominated sort. Returns one front index per point (0 = non-dominated).
 
     When epsilon-dominance is cyclic and no remaining point is undominated, the remaining points
     dominated by the fewest remaining points form the next front, exactly as the C++ sort does.
     """
-    dominance = dominance_matrix(objectives, epsilon, violations)
+    dominance = dominance_matrix(objectives, epsilon, violations, violation_epsilon)
     count = len(dominance)
     ranks = np.full(count, -1, dtype=int)
     remaining = np.ones(count, dtype=bool)
@@ -258,7 +262,7 @@ def select_objectives(partials, groups, recorded_objectives, recorded_groups) ->
     return ObjectiveSpace(group_objectives(partials, groups), labels, "plain mean")
 
 
-def summarize_generation(objectives, partials, fitness, epsilon: float, floor: float) -> dict:
+def summarize_generation(objectives, partials, fitness, epsilon: float, floor: float, violation_epsilon: float = 0.0) -> dict:
     """Headline Pareto metrics for one generation's population: ranks and crowding, front-0 size,
     number of fronts, feasible share, specialist share of front 0, hypervolume of the feasible
     front-0 points, and the rank of the scalar (weighted-sum) best individual."""
@@ -266,7 +270,7 @@ def summarize_generation(objectives, partials, fitness, epsilon: float, floor: f
     partials = np.asarray(partials, dtype=float)
     fitness = np.asarray(fitness, dtype=float)
     violations = constraint_violation(partials, floor)
-    ranks = non_dominated_sort(objectives, epsilon, violations)
+    ranks = non_dominated_sort(objectives, epsilon, violations, violation_epsilon)
     front0 = ranks == 0
     feasible_front0 = front0 & (violations <= 0)
     hv, hv_exact = hypervolume(objectives[feasible_front0])
@@ -300,7 +304,8 @@ def space_for_rows(rows, groups, recorded_groups) -> ObjectiveSpace:
     return select_objectives(rows[numbered_columns(rows, "p")].to_numpy(), groups, recorded, recorded_groups)
 
 
-def generation_metrics(individuals, generations, groups, recorded_groups, epsilon: float, floor: float):
+def generation_metrics(individuals, generations, groups, recorded_groups, epsilon: float, floor: float,
+                       violation_epsilon: float = 0.0):
     """One row per generation (1-based gen_display) of the page's headline metrics, as
     percentages where they are shares. The feasible share is left out while the floor is off."""
     rows = []
@@ -310,7 +315,8 @@ def generation_metrics(individuals, generations, groups, recorded_groups, epsilo
             continue
         space = space_for_rows(members, groups, recorded_groups)
         partials = members[numbered_columns(members, "p")].to_numpy()
-        summary = summarize_generation(space.values, partials, members["fitness"].to_numpy(), epsilon, floor)
+        summary = summarize_generation(space.values, partials, members["fitness"].to_numpy(), epsilon, floor,
+                                       violation_epsilon)
         row = {
             "gen_display": int(generation) + 1,
             "hypervolume": summary["hypervolume"],
