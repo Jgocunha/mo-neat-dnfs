@@ -11,22 +11,21 @@ namespace neat_dnfs::test {
 // matters for any task whose geometry differs from the global default -- dmts
 // runs at xSize 360 because its fields represent hue.
 //
-// DimensionConstants is a single global and Catch2 runs every task in one
-// process, so applying a task's config has to be scoped: this restores the
-// previous values on destruction, leaving the other tasks untouched. Construct
+// A task's config sets process-wide constants -- field size, time step, noise,
+// mutation rates -- and Catch2 runs every task in one process, so applying it
+// has to be scoped: on destruction this reloads the global reference config,
+// which is what tests/entry.cpp loads and every test starts from. Construct
 // it *before* defaultTopologyFor(), which reads xSize, and keep it alive across
 // evaluate() too -- Solution's bump-position tolerance is xSize/20, read at
 // evaluation time.
 //
-// The reference config is reloaded too, before the dimensions are restored. A
-// task's objectiveGroups index that task's partials, and the loader keeps the
-// merged task config as the base later ablations merge onto, so left in place
-// they make the next solution with a different partial count throw.
+// That includes SelectionConstants and the base later ablations merge onto: a
+// task's objectiveGroups index that task's partials, so left in place they make
+// the next solution with a different partial count throw.
 class ScopedTaskConfig
 {
 public:
     explicit ScopedTaskConfig(const std::string& slug)
-        : previousXSize(DimensionConstants::xSize), previousDx(DimensionConstants::dx)
     {
         ConfigLoader::loadConfig(ConfigLoader::defaultGlobalConfigPath(), slug);
     }
@@ -34,18 +33,43 @@ public:
     ~ScopedTaskConfig()
     {
         ConfigLoader::loadGlobalConfig(ConfigLoader::defaultGlobalConfigPath());
-        DimensionConstants::xSize = previousXSize;
-        DimensionConstants::dx = previousDx;
     }
 
     ScopedTaskConfig(const ScopedTaskConfig&) = delete;
     ScopedTaskConfig& operator=(const ScopedTaskConfig&) = delete;
     ScopedTaskConfig(ScopedTaskConfig&&) = delete;
     ScopedTaskConfig& operator=(ScopedTaskConfig&&) = delete;
+};
+
+// NoiseConstants::amplitude and SimulationConstants::deltaT are process-wide
+// globals, so a test that needs a particular task's noise regime has to put
+// the previous values back afterwards. Construct it *before*
+// Solution::initialize(): FieldGene reads the noise amplitude when it builds
+// each field's noise element.
+class ScopedNoiseAndTimestep
+{
+public:
+    ScopedNoiseAndTimestep(const double amplitude, const double deltaT)
+        : previousAmplitude(NoiseConstants::amplitude), previousDeltaT(SimulationConstants::deltaT)
+    {
+        NoiseConstants::amplitude = amplitude;
+        SimulationConstants::deltaT = deltaT;
+    }
+
+    ~ScopedNoiseAndTimestep()
+    {
+        NoiseConstants::amplitude = previousAmplitude;
+        SimulationConstants::deltaT = previousDeltaT;
+    }
+
+    ScopedNoiseAndTimestep(const ScopedNoiseAndTimestep&) = delete;
+    ScopedNoiseAndTimestep& operator=(const ScopedNoiseAndTimestep&) = delete;
+    ScopedNoiseAndTimestep(ScopedNoiseAndTimestep&&) = delete;
+    ScopedNoiseAndTimestep& operator=(ScopedNoiseAndTimestep&&) = delete;
 
 private:
-    int previousXSize;
-    double previousDx;
+    double previousAmplitude;
+    double previousDeltaT;
 };
 
 // FieldGene's usual constructor randomizes everything that decides whether a

@@ -462,6 +462,7 @@ namespace neat_dnfs
 			field(pc, "saveSpecies", &PopulationConstants::saveSpecies);
 			field(pc, "saveStructuredOverview", &PopulationConstants::saveStructuredOverview);
 			PopulationConstants::saveObjectives = pc.value("saveObjectives", true);
+			PopulationConstants::saveParetoFront = pc.value("saveParetoFront", true);
 
 			applySelectionConstants(j);
 		}
